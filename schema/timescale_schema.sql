@@ -1,3 +1,5 @@
+CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;
+
 DROP TABLE IF EXISTS historical_price CASCADE;
 
 CREATE TABLE historical_price (
@@ -10,4 +12,7 @@ CREATE TABLE historical_price (
     PRIMARY KEY (time)
 );
 
-SELECT create_hypertable('historical_price', 'time', if_not_exists => TRUE);
+SELECT create_hypertable('historical_price','time', chunk_time_interval => INTERVAL '7 days');
+
+
+CREATE UNIQUE INDEX IF NOT EXISTS historical_price_time_idx ON historical_price (time);

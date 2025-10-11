@@ -1,6 +1,6 @@
 # Core libraries
-requests>=2.32.3
-python-dotenv>=1.0.1
+requests
+python-dotenv
 
 # Data handling
 pandas>=2.2.3
@@ -8,8 +8,9 @@ pyarrow>=17.0.0
 fastparquet>=2024.5.0
 
 # Database + SQL
-sqlalchemy>=2.0.31
-psycopg2-binary>=2.9.9
+sqlalchemy
+psycopg2
+sqlparse
 
 # Initial data
 kagglehub

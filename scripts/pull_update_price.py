@@ -10,9 +10,9 @@ from datetime import datetime, timedelta, timezone
 # ----------------------------------------------------------------------
 from utils.logger import get_logger
 
-SGT = timezone(timedelta(hours=8))  # UTC+8
+SGT = timezone(timedelta(hours=8))
 
-log = get_logger("init_historical_price_data.py")
+log = get_logger("init_historical_price.py")
 
 
 # ----------------------------------------------------------------------
