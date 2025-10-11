@@ -1,0 +1,21 @@
+# Python virtual environments
+venv/
+env/
+
+# Byte-compiled / cache files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+
+# Environment variables or secret files
+.env
+*.env
+
+# IDE / editor settings
+.vscode/
+.idea/
