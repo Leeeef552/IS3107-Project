@@ -1,4 +1,3 @@
-# load_historical_price_to_timescale.py
 import os
 import sys
 import pandas as pd
@@ -63,6 +62,33 @@ def execute_schema_script(conn, script_path: str):
     cur.close()
     log.info("✅ Schema executed successfully")
 
+def execute_aggregation_script_separate_conn(config, script_path: str):
+    """Execute SQL script for continuous aggregates using separate connection."""
+    if not os.path.exists(script_path):
+        log.warning(f"⚠️ Aggregation script not found: {os.path.abspath(script_path)}")
+        log.info("Skipping continuous aggregates setup")
+        return
+
+    conn = psycopg2.connect(**config)
+    conn.autocommit = True  # ✅ Add this line
+    cur = conn.cursor()
+
+    try:
+        with open(script_path, "r") as file:
+            sql_commands = file.read()
+
+        for statement in sqlparse.split(sql_commands):
+            stmt = statement.strip()
+            if stmt:
+                try:
+                    cur.execute(stmt)
+                except Exception as e:
+                    log.warning(f"⚠️ Skipping failed aggregation statement:\n{stmt[:100]}...\nError: {e}")
+        log.info("✅ Continuous aggregates executed successfully")
+
+    finally:
+        cur.close()
+        conn.close()
 
 def load_parquet_data(parquet_path: str) -> pd.DataFrame:
     """Load and preprocess Parquet data for ingestion."""
@@ -124,7 +150,8 @@ def bulk_insert_data(conn, df: pd.DataFrame, table_name: str):
 # ✅ MAIN ENTRY POINT
 # ----------------------------------------------------------------------
 def main():
-    SCHEMA_PATH = "schema/timescale_schema.sql"
+    SCHEMA_PATH = "schema/init_price_db.sql"
+    AGGREGATION_PATH = "schema/aggregate_views.sql"
     PARQUET_PATH = "historical_data/btcusd_1-min_data.parquet"
     TABLE_NAME = "historical_price"
 
@@ -134,17 +161,21 @@ def main():
     db_config = get_db_config()
     conn = connect_to_db(db_config)
 
-    # 2. Execute schema
+    # 2. Execute base schema
     execute_schema_script(conn, SCHEMA_PATH)
 
     # 3. Load and preprocess data
     df = load_parquet_data(PARQUET_PATH)
 
-    # 4. Bulk insert
+    # 4. Bulk insert historical data
     bulk_insert_data(conn, df, TABLE_NAME)
 
-    # 5. Cleanup
+    # 5. Close main connection before creating aggregates
     conn.close()
+
+    # 6. Create continuous aggregates using separate connection (no transaction)
+    execute_aggregation_script_separate_conn(db_config, AGGREGATION_PATH)
+
     log.info("=== Historical Price Data Loader to TimescaleDB Finished ===")
 
 
