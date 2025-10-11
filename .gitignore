@@ -19,3 +19,7 @@ dist/
 # IDE / editor settings
 .vscode/
 .idea/
+
+# Datafile
+*.csv
+*.parquet
