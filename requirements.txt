@@ -1,6 +1,8 @@
 # Core libraries
 requests
 python-dotenv
+websocket
+websockets
 
 # Data handling
 pandas>=2.2.3
