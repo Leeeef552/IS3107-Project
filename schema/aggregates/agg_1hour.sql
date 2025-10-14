@@ -14,6 +14,8 @@ FROM historical_price
 GROUP BY bucket
 WITH NO DATA;
 
+CALL refresh_continuous_aggregate('price_1h', NULL, NULL);
+
 -- Continuous aggregate refresh policies
 SELECT add_continuous_aggregate_policy('price_1h',
     start_offset => INTERVAL '1 day',
