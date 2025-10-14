@@ -1,0 +1,4 @@
+"""
+News Sentiment Analysis Module
+"""
+

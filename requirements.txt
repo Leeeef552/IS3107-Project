@@ -8,6 +8,8 @@ websockets
 pandas>=2.2.3
 pyarrow>=17.0.0
 fastparquet>=2024.5.0
+numpy
+tabulate
 
 # Database + SQL
 sqlalchemy
@@ -16,3 +18,20 @@ sqlparse
 
 # Initial data
 kagglehub
+
+# =====================================================================
+# SENTIMENT ANALYSIS DEPENDENCIES
+# =====================================================================
+
+# News Sources
+newsapi-python          # NewsAPI client for professional news
+praw                    # Reddit API client for community sentiment
+
+# Sentiment Analysis
+transformers>=4.30.0    # HuggingFace transformers for FinBERT
+torch>=2.0.0           # PyTorch for deep learning models
+vaderSentiment         # VADER sentiment analyzer (fallback)
+
+# Model optimization (optional but recommended)
+sentencepiece          # Required by some transformer models
+accelerate             # Speed up model loading
