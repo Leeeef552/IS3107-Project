@@ -10,7 +10,7 @@ from datetime import datetime, timezone, timedelta
 # ✅ LOGGING CONFIGURATION (Singapore Time)
 # ----------------------------------------------------------------------
 from utils.logger import get_logger
-log = get_logger("stream_kline_binance.py")
+log = get_logger("stream_price.py")
 
 
 # ----------------------------------------------------------------------

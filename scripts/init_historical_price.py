@@ -1,5 +1,5 @@
 import os
-import sys
+import shutil
 import pandas as pd
 import kagglehub
 from utils.logger import get_logger
@@ -17,7 +17,6 @@ log = get_logger("init_historical_price.py")
 # ----------------------------------------------------------------------
 def ensure_directory(path: str):
     os.makedirs(path, exist_ok=True)
-    # log.info(f"Ensured directory: {os.path.abspath(path)}")
 
 def download_kaggle_dataset(dataset_slug: str) -> str:
     log.info(f"⬇️ Downloading dataset: {dataset_slug}")
@@ -25,30 +24,30 @@ def download_kaggle_dataset(dataset_slug: str) -> str:
     log.info(f"📦 Download complete: {path}")
     return path
 
-def find_csv_file(download_path: str) -> str:
-    csv_files = [f for f in os.listdir(download_path) if f.lower().endswith(".csv")]
-    if not csv_files:
-        raise FileNotFoundError("No CSV found in dataset.")
-    return os.path.join(download_path, csv_files[0])
-
-def convert_to_parquet(csv_path: str, parquet_path: str):
-    df = pd.read_csv(csv_path)
-    log.info(f"Loaded CSV ({len(df):,} rows × {len(df.columns)} cols)")
-    df.to_parquet(parquet_path, index=False, compression="snappy")
-    log.info(f"Saved as Parquet: {parquet_path}")
+def find_parquet_file(download_path: str) -> str:
+    """Find the first .parquet file in the downloaded dataset."""
+    parquet_files = [f for f in os.listdir(download_path) if f.lower().endswith(".parquet")]
+    if not parquet_files:
+        raise FileNotFoundError("No .parquet file found in the downloaded dataset.")
+    return os.path.join(download_path, parquet_files[0])
 
 
 # ----------------------------------------------------------------------
 # MAIN ENTRY POINT
 # ----------------------------------------------------------------------
 def init_historical_price(**kwargs):
-    """Download and convert Bitcoin dataset."""
+    """Download Bitcoin dataset (assumed to be in Parquet format)."""
     ensure_directory(DATA_DIR)
+    
     if os.path.exists(PARQUET_PATH):
         log.info("Parquet file already exists. Skipping download.")
         return PARQUET_PATH
 
     download_path = download_kaggle_dataset(DATASET_SLUG)
-    csv_path = find_csv_file(download_path)
-    convert_to_parquet(csv_path, PARQUET_PATH)
+    downloaded_parquet = find_parquet_file(download_path)
+    
+    # Copy to your standardized path
+    shutil.copy(downloaded_parquet, PARQUET_PATH)
+    log.info(f"✅ Parquet file saved to: {PARQUET_PATH}")
+    
     return PARQUET_PATH
