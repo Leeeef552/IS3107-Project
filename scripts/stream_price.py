@@ -10,7 +10,7 @@ from datetime import datetime, timezone, timedelta
 # ✅ LOGGING CONFIGURATION (Singapore Time)
 # ----------------------------------------------------------------------
 from utils.logger import get_logger
-log = get_logger("stream_price_binance.py")
+log = get_logger("stream_kline_binance.py")
 
 
 # ----------------------------------------------------------------------
@@ -24,19 +24,33 @@ def format_sgt_time(ts: int) -> str:
 
 def on_open(ws):
     """Called when WebSocket connection is opened."""
-    log.info("✅ Connected to Binance BTC/USDT WebSocket (Trade Stream)")
+    log.info("✅ Connected to Binance BTC/USDT WebSocket (1m Kline Stream)")
 
 
 def on_message(ws, message):
-    """Handle incoming WebSocket messages."""
+    """Handle incoming kline WebSocket messages."""
     try:
         data = json.loads(message)
-        price = float(data["p"])       # trade price
-        volume = float(data["q"])      # trade quantity
-        trade_time = format_sgt_time(data["T"])
-        log.info(f"💰 Trade at {trade_time} | Price: ${price:,.2f} | Volume: {volume}")
+        kline = data["k"]
+        symbol = kline["s"]
+        interval = kline["i"]
+        start_time = format_sgt_time(kline["t"])
+        end_time = format_sgt_time(kline["T"])
+        open_price = float(kline["o"])
+        high = float(kline["h"])
+        low = float(kline["l"])
+        close = float(kline["c"])
+        volume = float(kline["v"])
+        is_final = kline["x"]  # True if candle is closed
+
+        status = "✅ FINAL" if is_final else "⏳ FORMING"
+        log.info(
+            f"{status} | {symbol} {interval} | "
+            f"{start_time}–{end_time} | "
+            f"O: ${open_price:,.2f} H: ${high:,.2f} L: ${low:,.2f} C: ${close:,.2f} | Vol: {volume:,.3f}"
+        )
     except Exception as e:
-        log.error(f"Error parsing message: {e}")
+        log.error(f"Error parsing kline message: {e}")
 
 
 def on_error(ws, error):
@@ -50,8 +64,9 @@ def on_close(ws, code, msg):
 
 
 def run_ws(symbol: str = "btcusdt"):
-    """Run Binance WebSocket connection in the foreground."""
-    socket = f"wss://stream.binance.com:9443/ws/{symbol}@trade"
+    """Run Binance 1m kline WebSocket connection."""
+    # 🔥 Changed from @trade to @kline_1m
+    socket = f"wss://stream.binance.com:9443/ws/{symbol}@kline_1m"
     ws = websocket.WebSocketApp(
         socket,
         on_open=on_open,
@@ -67,7 +82,7 @@ def run_ws(symbol: str = "btcusdt"):
 # ----------------------------------------------------------------------
 def main():
     SYMBOL = "btcusdt"
-    log.info(f"=== Binance Live {SYMBOL.upper()} WebSocket Listener Started ===")
+    log.info(f"=== Binance Live {SYMBOL.upper()} 1m Kline Stream Started ===")
     log.info("Source: wss://stream.binance.com:9443/ws")
 
     try:
