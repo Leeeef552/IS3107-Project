@@ -7,14 +7,14 @@ from datetime import timedelta
 from scripts.init_historical_price import init_historical_price
 from scripts.load_price import load_price_to_timescaledb
 from scripts.create_aggregates import create_aggregate
-from scripts.pull_update_price import update_historical_price
+from scripts.backfill_price import update_historical_price
 
 from configs.config import PARQUET_PATH, AGGREGATES_DIR
 
 # ✅ List of aggregate scripts to execute
 sql_dir = "schema/aggregates"
 
-AGGREGATE_SCRIPTS = [
+AGGREGATE_SCRIPTS = [   
     f
     for f in sorted(os.listdir(sql_dir))
     if f.endswith(".sql")
