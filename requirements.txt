@@ -15,6 +15,7 @@ tabulate
 sqlalchemy
 psycopg2
 sqlparse
+redis
 
 # Initial data
 kagglehub

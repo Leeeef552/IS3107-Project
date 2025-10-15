@@ -1,105 +1,112 @@
-import os
-import sys
 import json
 import time
 import threading
 import websocket
+import redis
 from datetime import datetime, timezone, timedelta
 
-# ----------------------------------------------------------------------
-# ✅ LOGGING CONFIGURATION (Singapore Time)
-# ----------------------------------------------------------------------
-from utils.logger import get_logger
-log = get_logger("stream_price.py")
+from utils.logger import get_logger, SGT
+from configs.config import REDIS_CONFIG
 
+log = get_logger("stream_price")
+BINANCE_SYMBOL = "btcusdt"
+BINANCE_INTERVAL = "1m"
 
 # ----------------------------------------------------------------------
-# ✅ CORE FUNCTIONS
+# REDIS CONNECTION
+# ----------------------------------------------------------------------
+r = redis.Redis(
+    host=REDIS_CONFIG["host"],
+    port=REDIS_CONFIG["port"],
+    decode_responses=True,
+)
+STREAM_KEY = REDIS_CONFIG["stream_key"]
+MAXLEN = REDIS_CONFIG["maxlen"]
+
+# ----------------------------------------------------------------------
+# Time Conversion (convert binance time stamps)
 # ----------------------------------------------------------------------
 def format_sgt_time(ts: int) -> str:
     """Convert UNIX timestamp (ms) to Singapore Time (HH:MM:SS)."""
-    sgt = timezone(timedelta(hours=8))
-    return datetime.fromtimestamp(ts / 1000, tz=timezone.utc).astimezone(sgt).strftime("%H:%M:%S")
+    return datetime.fromtimestamp(ts / 1000, tz=SGT).strftime("%H:%M:%S")
 
-
+# ----------------------------------------------------------------------
+# HELPER FUNCTIONS
+# ----------------------------------------------------------------------
 def on_open(ws):
-    """Called when WebSocket connection is opened."""
-    log.info("✅ Connected to Binance BTC/USDT WebSocket (1m Kline Stream)")
-
+    log.info(f"✅ Connected to Binance {BINANCE_SYMBOL.upper()} WebSocket (1m Kline Stream)")
 
 def on_message(ws, message):
-    """Handle incoming kline WebSocket messages."""
     try:
         data = json.loads(message)
         kline = data["k"]
-        symbol = kline["s"]
-        interval = kline["i"]
-        start_time = format_sgt_time(kline["t"])
-        end_time = format_sgt_time(kline["T"])
-        open_price = float(kline["o"])
-        high = float(kline["h"])
-        low = float(kline["l"])
-        close = float(kline["c"])
-        volume = float(kline["v"])
-        is_final = kline["x"]  # True if candle is closed
 
-        status = "✅ FINAL" if is_final else "⏳ FORMING"
-        log.info(
-            f"{status} | {symbol} {interval} | "
-            f"{start_time}–{end_time} | "
-            f"O: ${open_price:,.2f} H: ${high:,.2f} L: ${low:,.2f} C: ${close:,.2f} | Vol: {volume:,.3f}"
-        )
+        payload = {
+            "symbol": kline["s"],
+            "interval": kline["i"],
+            "start_time": format_sgt_time(kline["t"]),
+            "end_time": format_sgt_time(kline["T"]),
+            "open": float(kline["o"]),
+            "high": float(kline["h"]),
+            "low": float(kline["l"]),
+            "close": float(kline["c"]),
+            "volume": float(kline["v"]),
+            "is_final": int(kline["x"])
+        }
+
+        r.xadd(STREAM_KEY, payload, maxlen=MAXLEN)
+        status = "✅ FINAL" if payload["is_final"] else "⏳ FORMING"
+        log.info(f"{status} | {payload['symbol']} {payload['interval']} | "
+                 f"{payload['start_time']}–{payload['end_time']} | "
+                 f"O:{payload['open']:.2f} H:{payload['high']:.2f} L:{payload['low']:.2f} "
+                 f"C:{payload['close']:.2f} | Vol:{payload['volume']:.3f}")
     except Exception as e:
-        log.error(f"Error parsing kline message: {e}")
-
+        log.error(f"Error parsing/pushing message: {e}")
 
 def on_error(ws, error):
-    """Handle WebSocket errors."""
     log.error(f"⚠️ WebSocket error: {error}")
 
-
 def on_close(ws, code, msg):
-    """Handle WebSocket closure."""
     log.warning(f"❌ Disconnected from Binance (code={code}, msg={msg})")
 
+# ----------------------------------------------------------------------
+# MAIN ENTRY POINT
+# ----------------------------------------------------------------------
+def run_streamer(run_forever=True):
+    """Start Binance WebSocket streamer — Airflow-safe."""
+    log.info(f"=== Starting Binance {BINANCE_SYMBOL.upper()} Stream ===")
 
-def run_ws(symbol: str = "btcusdt"):
-    """Run Binance 1m kline WebSocket connection."""
-    # 🔥 Changed from @trade to @kline_1m
-    socket = f"wss://stream.binance.com:9443/ws/{symbol}@kline_1m"
+    socket = f"wss://stream.binance.com:9443/ws/{BINANCE_SYMBOL}@kline_1m"
     ws = websocket.WebSocketApp(
         socket,
         on_open=on_open,
         on_message=on_message,
         on_error=on_error,
-        on_close=on_close
+        on_close=on_close,
     )
-    ws.run_forever(ping_interval=20, ping_timeout=10)
 
-
-# ----------------------------------------------------------------------
-# ✅ MAIN ENTRY POINT
-# ----------------------------------------------------------------------
-def main():
-    SYMBOL = "btcusdt"
-    log.info(f"=== Binance Live {SYMBOL.upper()} 1m Kline Stream Started ===")
-    log.info("Source: wss://stream.binance.com:9443/ws")
+    t = threading.Thread(target=ws.run_forever, kwargs={"ping_interval": 20, "ping_timeout": 10})
+    t.daemon = True
+    t.start()
 
     try:
-        t = threading.Thread(target=run_ws, args=(SYMBOL,))
-        t.daemon = True
-        t.start()
-
-        # Keep main thread alive
-        while True:
-            time.sleep(1)
+        if run_forever:
+            while True:
+                time.sleep(1)
+        else:
+            # For Airflow test mode, run briefly
+            time.sleep(10)
+            log.info("Streamer test complete.")
+        return 0
     except KeyboardInterrupt:
-        log.info("🛑 Termination requested by user. Stopping...")
-        sys.exit(0)
+        log.info("🛑 Stopping streamer...")
+        return 0
     except Exception as e:
         log.error(f"Unexpected error: {e}")
-        sys.exit(1)
+        return 1
 
-
+# ----------------------------------------------------------------------
+# MAIN
+# ----------------------------------------------------------------------
 if __name__ == "__main__":
-    sys.exit(main())
+    run_streamer(run_forever=True)
