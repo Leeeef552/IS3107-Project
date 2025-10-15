@@ -158,7 +158,7 @@ def fetch_and_append_missing_data(currency_pair, start_timestamp, end_timestamp,
 # ----------------------------------------------------------------------
 # MAIN ENTRY POINT
 # ----------------------------------------------------------------------
-def update_historical_price(currency_pair="btcusd", parquet_filename=PARQUET_PATH, **kwargs):
+def backfill_price(currency_pair="btcusd", parquet_filename=PARQUET_PATH, **kwargs):
     """
     Detect missing or new data from Bitstamp API and update the Parquet dataset.
 
@@ -201,4 +201,4 @@ def update_historical_price(currency_pair="btcusd", parquet_filename=PARQUET_PAT
     log.info("=== Crypto Data Updater Finished ===")
     return parquet_filename
 
-update_historical_price()
+backfill_price()
