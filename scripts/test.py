@@ -4,10 +4,10 @@ import os
 from datetime import timedelta
 
 # Direct function imports instead of subprocess calls
-from scripts.init_historical_price import init_historical_price
-from scripts.load_price import load_price_to_timescaledb
-from scripts.create_aggregates import create_aggregate
-from scripts.pull_update_price import update_historical_price
+from scripts.price.init_historical_price import init_historical_price
+from scripts.price.load_price import load_price
+from scripts.price.create_aggregates import create_aggregate
+from scripts.price.pull_update_price import update_historical_price
 
 from configs.config import PARQUET_PATH, AGGREGATES_DIR
 
@@ -56,7 +56,7 @@ def run_pipeline():
     run_function(init_historical_price, "init_historical_price")
     
     # Step 2: Load data into TimescaleDB
-    run_function(load_price_to_timescaledb, "load_price_to_timescaledb")
+    run_function(load_price, "load_price")
     
     # Step 3: Create continuous aggregates in parallel
     print(f"\n=== 🚀 Running create_aggregates in parallel ===")
@@ -140,9 +140,9 @@ def test_individual_functions():
         print(f"❌ Test failed: {e}")
     
     # Test 3: Load Price (requires DB connection)
-    print("\n--- Test 3: load_price_to_timescaledb ---")
+    print("\n--- Test 3: load_price ---")
     try:
-        result = load_price_to_timescaledb(parquet_path=PARQUET_PATH)
+        result = load_price(parquet_path=PARQUET_PATH)
         print(f"✅ Test passed: {result}")
     except Exception as e:
         print(f"❌ Test failed: {e}")

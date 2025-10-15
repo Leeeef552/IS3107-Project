@@ -75,7 +75,7 @@ echo "Step 2/5: Pulling Latest Price Data"
 echo "============================================"
 echo "Fetching latest prices from Bitstamp API..."
 echo ""
-python -m scripts.pull_update_price
+python -m scripts.price.pull_update_price
 echo ""
 echo "[OK] Latest price data pulled"
 echo ""

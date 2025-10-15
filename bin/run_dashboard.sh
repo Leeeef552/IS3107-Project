@@ -92,7 +92,7 @@ if [[ $DATA_CHECK =~ "does not exist" ]] || [[ $DATA_CHECK =~ "ERROR" ]]; then
     echo ""
     echo "To load initial data:"
     echo "  python -m scripts.init_historical_price"
-    echo "  python -m scripts.pull_update_price"
+    echo "  python -m scripts.price.pull_update_price"
     echo "  python -m scripts.load_price"
     echo ""
     read -p "Continue anyway? (y/n) " -n 1 -r

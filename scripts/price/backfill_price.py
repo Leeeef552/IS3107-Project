@@ -12,7 +12,7 @@ from configs.config import PARQUET_PATH
 from utils.logger import get_logger
 
 SGT = timezone(timedelta(hours=8))
-log = get_logger("pull_update_price")
+log = get_logger("backfill_price")
 
 
 # ----------------------------------------------------------------------
@@ -158,7 +158,7 @@ def fetch_and_append_missing_data(currency_pair, start_timestamp, end_timestamp,
 # ----------------------------------------------------------------------
 # MAIN ENTRY POINT
 # ----------------------------------------------------------------------
-def update_historical_price(currency_pair="btcusd", parquet_filename=PARQUET_PATH, **kwargs):
+def backfill_price(currency_pair="btcusd", parquet_filename=PARQUET_PATH, **kwargs):
     """
     Detect missing or new data from Bitstamp API and update the Parquet dataset.
 
@@ -200,3 +200,5 @@ def update_historical_price(currency_pair="btcusd", parquet_filename=PARQUET_PAT
 
     log.info("=== Crypto Data Updater Finished ===")
     return parquet_filename
+
+backfill_price()

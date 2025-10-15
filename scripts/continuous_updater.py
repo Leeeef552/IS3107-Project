@@ -22,7 +22,7 @@ import psycopg2
 from datetime import datetime, timedelta
 from io import StringIO
 from utils.logger import get_logger
-from scripts.pull_update_price import update_historical_price
+from scripts.price.backfill_price import backfill_price
 from configs.config import DB_CONFIG, PARQUET_PATH
 
 log = get_logger("continuous_updater")
@@ -44,8 +44,8 @@ def load_new_price_data_only(parquet_path=PARQUET_PATH):
         
         if latest_db_time is None:
             log.warning("No data in database, loading full dataset...")
-            from scripts.load_price import load_price_to_timescaledb
-            return load_price_to_timescaledb(parquet_path=parquet_path)
+            from scripts.price.load_price import load_price
+            return load_price(parquet_path=parquet_path)
         
         # Load parquet and filter for new data only
         df = pd.read_parquet(parquet_path)
@@ -191,7 +191,7 @@ def continuous_update(interval=60):
             try:
                 # Step 1: Pull latest price data from Bitstamp
                 log.info("Step 1: Pulling latest price data from Bitstamp...")
-                parquet_path = update_historical_price()
+                parquet_path = backfill_price()
                 
                 # Step 2: Load ONLY NEW price data into TimescaleDB (much faster!)
                 log.info("Step 2: Loading NEW price data into TimescaleDB...")

@@ -240,16 +240,16 @@ Follow the prompts to complete setup.
 
 ```bash
 # Step 1: Initialize price database schema
-python -m scripts.init_historical_price
+python -m scripts.price.init_historical_price
 
 # Step 2: Pull latest price data from Bitstamp
-python -m scripts.pull_update_price
+python -m scripts.price.pull_update_price
 
 # Step 3: Load price data into TimescaleDB
-python -m scripts.load_price
+python -m scripts.price.load_price
 
 # Step 4: Create continuous aggregates
-python -m scripts.create_aggregates
+python -m scripts.price.create_aggregates
 ```
 
 **News Sentiment Data (Optional)**

@@ -10,16 +10,13 @@ from configs.config import DB_CONFIG
 # ----------------------------------------------------------------------
 # LOGGING CONFIGURATION 
 # ----------------------------------------------------------------------
-log = get_logger("pull_update_price")
+log = get_logger("update_price")
 
 
 # ----------------------------------------------------------------------
 # BINANCE API CONFIGS 
 # ----------------------------------------------------------------------
 BINANCE_KLINES_URL = "https://api.binance.com/api/v3/klines"
-INTERVAL = "1m"  # 1-minute candles
-LIMIT = 1000  # Max per request
-BINANCE_KLINES_URL = "https://api.binance.com/api/v3/klines"  # ⚠️ Fixed: removed trailing space!
 INTERVAL = "1m"
 LIMIT = 1000
 UTC = timezone.utc
@@ -82,7 +79,7 @@ def find_missing_ranges_in_db():
     # Tail gap
     tail_start_ms_to_use = tail_start_ms if tail_start_ms < now_ts_ms else None
 
-    # Internal gaps in last 24h
+    # Internal gaps in last 3 days
     recent_start = now - timedelta(days=3)
     with get_db_connection() as conn:
         with conn.cursor() as cur:

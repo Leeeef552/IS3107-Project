@@ -131,11 +131,11 @@ read -p "Do you want to download and load historical price data? This will take 
 echo
 if [[ $REPLY =~ ^[Yy]$ ]]; then
     print_warning "Downloading historical data from Kaggle..."
-    python -m scripts.init_historical_price
+    python -m scripts.price.init_historical_price
     print_status "Historical data downloaded"
     
     print_warning "Updating to latest prices..."
-    python -m scripts.pull_update_price
+    python -m scripts.price.pull_update_price
     print_status "Price data updated"
     
     print_warning "Loading data into database..."

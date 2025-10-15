@@ -62,7 +62,7 @@ def bulk_insert_data(conn, df: pd.DataFrame, table_name: str):
 # ----------------------------------------------------------------------
 # MAIN ENTRY POINT
 # ----------------------------------------------------------------------
-def load_price_to_timescaledb(**kwargs):
+def load_price(**kwargs):
     """Load processed dataset into TimescaleDB."""
     parquet_path = kwargs.get("parquet_path", PARQUET_PATH)
     conn = connect_to_db()
