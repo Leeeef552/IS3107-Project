@@ -132,7 +132,7 @@ class NewsAggregator:
             cutoff_time = datetime.utcnow() - timedelta(hours=hours_back)
             
             for item in data.get("Data", []):
-                pub_time = datetime.fromtimestamp(item.get("published_on", 0))
+                pub_time = datetime.utcfromtimestamp(item.get("published_on", 0))
                 
                 if pub_time < cutoff_time:
                     continue
@@ -185,7 +185,7 @@ class NewsAggregator:
                 
                 # Get hot posts
                 for submission in subreddit.hot(limit=limit):
-                    post_time = datetime.fromtimestamp(submission.created_utc)
+                    post_time = datetime.utcfromtimestamp(submission.created_utc)
                     
                     if post_time < cutoff_time:
                         continue

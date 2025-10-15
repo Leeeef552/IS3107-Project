@@ -1,0 +1,26 @@
+[theme]
+# Bitcoin-themed dark mode configuration
+primaryColor = "#FF9500"
+backgroundColor = "#0E1117"
+secondaryBackgroundColor = "#1E1E1E"
+textColor = "#FAFAFA"
+font = "sans serif"
+
+[server]
+# Server configuration
+headless = true
+port = 8501
+enableCORS = false
+enableXsrfProtection = true
+
+[browser]
+# Browser configuration
+gatherUsageStats = false
+serverAddress = "localhost"
+serverPort = 8501
+
+[runner]
+# Performance optimization
+magicEnabled = true
+fastReruns = true
+

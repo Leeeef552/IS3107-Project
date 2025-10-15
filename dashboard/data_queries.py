@@ -1,0 +1,313 @@
+"""
+Database query functions for the Bitcoin Analytics Dashboard
+
+This module handles all database connections and data retrieval operations.
+"""
+
+import streamlit as st
+import pandas as pd
+import requests
+from datetime import datetime
+import sys
+import os
+from sqlalchemy import create_engine
+
+# Add parent directory to path for imports
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from configs.config import DB_CONFIG
+
+
+@st.cache_resource
+def get_db_engine():
+    """Create a SQLAlchemy database engine for pandas queries"""
+    try:
+        connection_string = (
+            f"postgresql://{DB_CONFIG['user']}:{DB_CONFIG['password']}"
+            f"@{DB_CONFIG['host']}:{DB_CONFIG['port']}/{DB_CONFIG['dbname']}"
+        )
+        engine = create_engine(connection_string)
+        return engine
+    except Exception as e:
+        st.error(f"Database connection failed: {str(e)}")
+        return None
+
+
+@st.cache_data(ttl=10)  # Cache for 10 seconds for near-live updates
+def get_latest_price():
+    """Fetch the most recent Bitcoin price"""
+    engine = get_db_engine()
+    if engine is None:
+        return None
+    
+    try:
+        query = """
+        SELECT time, open, high, low, close, volume
+        FROM historical_price
+        ORDER BY time DESC
+        LIMIT 1
+        """
+        df = pd.read_sql_query(query, engine)
+        if not df.empty:
+            # Convert to Singapore time (GMT+8)
+            import pytz
+            singapore_tz = pytz.timezone('Asia/Singapore')
+            # Check if already timezone-aware, if so just convert, otherwise localize first
+            if df['time'].dt.tz is None:
+                df['time'] = pd.to_datetime(df['time']).dt.tz_localize('UTC').dt.tz_convert(singapore_tz)
+            else:
+                df['time'] = pd.to_datetime(df['time']).dt.tz_convert(singapore_tz)
+            return df.iloc[0]
+        return None
+    except Exception as e:
+        st.error(f"Error fetching latest price: {str(e)}")
+        return None
+
+
+@st.cache_data(ttl=60)
+def get_price_history(interval='1 hour', limit=168):
+    """
+    Fetch historical price data for charts
+    
+    Args:
+        interval: Time interval ('1 hour', '1 day', etc.)
+        limit: Number of data points to fetch
+        
+    Returns:
+        DataFrame with columns: time, open, high, low, close, volume
+    """
+    engine = get_db_engine()
+    if engine is None:
+        return pd.DataFrame()
+    
+    try:
+        # Map interval to appropriate table/aggregation
+        table_map = {
+            '5min': 'price_5min',
+            '1hour': 'price_1h',
+            '1day': 'price_1d',
+            '1week': 'price_1w'
+        }
+        
+        table = table_map.get(interval)
+        
+        if table:
+            query = f"""
+            SELECT bucket as time, open, high, low, close, volume
+            FROM {table}
+            ORDER BY bucket DESC
+            LIMIT {limit}
+            """
+        else:
+            # Fallback to raw data
+            query = f"""
+            SELECT time, open, high, low, close, volume
+            FROM historical_price
+            ORDER BY time DESC
+            LIMIT {limit}
+            """
+        
+        df = pd.read_sql_query(query, engine)
+        df = df.sort_values('time')  # Sort ascending for chart
+        return df
+    except Exception as e:
+        st.warning(f"Could not fetch price history: {str(e)}")
+        return pd.DataFrame()
+
+
+@st.cache_data(ttl=300)  # Cache for 5 minutes
+def get_latest_articles(limit=5):
+    """
+    Fetch the latest news articles with sentiment scores
+    
+    Args:
+        limit: Maximum number of articles to fetch
+        
+    Returns:
+        DataFrame with article data and sentiment information
+    """
+    engine = get_db_engine()
+    if engine is None:
+        return pd.DataFrame()
+    
+    try:
+        query = f"""
+        SELECT 
+            na.article_id,
+            na.published_at,
+            na.title,
+            na.content,
+            na.url,
+            na.source,
+            na.author,
+            ns.sentiment_score,
+            ns.sentiment_label,
+            ns.confidence
+        FROM news_articles na
+        LEFT JOIN news_sentiment ns ON na.article_id = ns.article_id
+        ORDER BY na.published_at DESC
+        LIMIT {limit}
+        """
+        df = pd.read_sql_query(query, engine)
+        
+        # Add image URL extraction logic
+        if not df.empty:
+            df['image_url'] = df.apply(lambda row: extract_image_url(row['url'], row['source']), axis=1)
+        
+        return df
+    except Exception as e:
+        st.warning(f"Could not fetch articles: {str(e)}")
+        return pd.DataFrame()
+
+
+def extract_image_url(article_url, source):
+    """
+    Extract or generate image URL for article
+    For now, returns placeholder based on source
+    """
+    # Placeholder images by source
+    source_images = {
+        'CryptoCompare': 'https://images.unsplash.com/photo-1518546305927-5a555bb7020d?w=400',
+        'Reddit': 'https://images.unsplash.com/photo-1621761191319-c6fb62004040?w=400',
+        'NewsAPI': 'https://images.unsplash.com/photo-1605792657660-596af9009e82?w=400'
+    }
+    return source_images.get(source, 'https://images.unsplash.com/photo-1621761191319-c6fb62004040?w=400')
+
+
+@st.cache_data(ttl=300)
+def get_sentiment_summary(interval='1 day', limit=7):
+    """
+    Fetch sentiment aggregates at different time intervals
+    
+    Args:
+        interval: Time interval ('1 hour', '1 day', '1 week', '1 month')
+        limit: Number of time periods to fetch
+        
+    Returns:
+        DataFrame with aggregated sentiment metrics
+    """
+    engine = get_db_engine()
+    if engine is None:
+        return pd.DataFrame()
+    
+    try:
+        table_map = {
+            '1 hour': 'sentiment_1h',
+            '1 day': 'sentiment_1d',
+            '1 week': 'sentiment_1w',
+            '1 month': 'sentiment_1mo'
+        }
+        
+        table = table_map.get(interval, 'sentiment_1d')
+        
+        query = f"""
+        SELECT 
+            bucket,
+            article_count,
+            avg_sentiment,
+            sentiment_volatility,
+            positive_count,
+            negative_count,
+            neutral_count,
+            avg_confidence
+        FROM {table}
+        ORDER BY bucket DESC
+        LIMIT {limit}
+        """
+        df = pd.read_sql_query(query, engine)
+        df = df.sort_values('bucket')  # Sort ascending for chart
+        return df
+    except Exception as e:
+        st.warning(f"Could not fetch sentiment data: {str(e)}")
+        return pd.DataFrame()
+
+
+@st.cache_data(ttl=3600)  # Cache for 1 hour
+def get_fear_greed_index():
+    """
+    Fetch Fear & Greed Index from alternative.me API
+    
+    Returns:
+        Dictionary with 'value', 'classification', and 'timestamp'
+        or None if request fails
+    """
+    try:
+        response = requests.get('https://api.alternative.me/fng/?limit=1', timeout=10)
+        if response.status_code == 200:
+            data = response.json()
+            if data['data']:
+                fng_data = data['data'][0]
+                return {
+                    'value': int(fng_data['value']),
+                    'classification': fng_data['value_classification'],
+                    'timestamp': datetime.fromtimestamp(int(fng_data['timestamp']))
+                }
+        return None
+    except Exception as e:
+        st.warning(f"Could not fetch Fear & Greed Index: {str(e)}")
+        return None
+
+
+@st.cache_data(ttl=3600)  # Cache for 1 hour
+def get_exchange_rate(base='USD', target='SGD'):
+    """
+    Fetch live exchange rate from free API
+    
+    Args:
+        base: Base currency code (default: USD)
+        target: Target currency code (default: SGD)
+        
+    Returns:
+        Float exchange rate, or fallback rate if API fails
+    """
+    fallback_rate = 1.35  # Fallback approximate rate
+    
+    try:
+        # Using exchangerate-api.com free tier (no auth required)
+        url = f'https://open.er-api.com/v6/latest/{base}'
+        response = requests.get(url, timeout=10)
+        
+        if response.status_code == 200:
+            data = response.json()
+            if data and 'rates' in data and target in data['rates']:
+                rate = data['rates'][target]
+                return float(rate)
+        
+        # Fallback if API fails
+        return fallback_rate
+    except Exception as e:
+        # Silently fallback to approximate rate
+        return fallback_rate
+
+
+def test_database_connection():
+    """
+    Test database connection and verify tables exist
+    
+    Returns:
+        Dictionary with connection status and available tables
+    """
+    engine = get_db_engine()
+    if engine is None:
+        return {'connected': False, 'tables': []}
+    
+    try:
+        query = """
+        SELECT table_name 
+        FROM information_schema.tables 
+        WHERE table_schema = 'public' 
+        AND table_type = 'BASE TABLE'
+        ORDER BY table_name
+        """
+        df = pd.read_sql_query(query, engine)
+        return {
+            'connected': True,
+            'tables': df['table_name'].tolist()
+        }
+    except Exception as e:
+        return {
+            'connected': False,
+            'error': str(e),
+            'tables': []
+        }
+
