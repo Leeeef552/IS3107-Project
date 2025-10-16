@@ -64,7 +64,7 @@ echo "Step 1/5: Downloading Historical Data"
 echo "============================================"
 echo "This downloads ~500MB from Kaggle..."
 echo ""
-python -m scripts.init_historical_price
+python -m scripts.price.init_historical_price
 echo ""
 echo "[OK] Historical data downloaded"
 echo ""
@@ -75,7 +75,7 @@ echo "Step 2/5: Pulling Latest Price Data"
 echo "============================================"
 echo "Fetching latest prices from Bitstamp API..."
 echo ""
-python -m scripts.price.pull_update_price
+python -m scripts.price.backfill_price
 echo ""
 echo "[OK] Latest price data pulled"
 echo ""
@@ -86,7 +86,7 @@ echo "Step 3/5: Loading Data into TimescaleDB"
 echo "============================================"
 echo "This may take 3-10 minutes for full history..."
 echo ""
-python -m scripts.load_price
+python -m scripts.price.load_price
 echo ""
 echo "[OK] Price data loaded into database"
 echo ""
