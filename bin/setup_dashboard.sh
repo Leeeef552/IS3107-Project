@@ -188,7 +188,7 @@ echo ""
 echo "Your Bitcoin Analytics Dashboard is ready!"
 echo ""
 echo "To launch the dashboard, run:"
-echo "  ./run_dashboard.sh"
+echo "  ./bin/run_dashboard.sh"
 echo ""
 echo "Or:"
 echo "  streamlit run dashboard/app.py"
@@ -202,6 +202,6 @@ if [[ $REPLY =~ ^[Yy]$ ]]; then
     print_status "Launching dashboard..."
     streamlit run dashboard/app.py
 else
-    print_status "Setup complete! Run './run_dashboard.sh' when ready."
+    print_status "Setup complete! Run './bin/run_dashboard.sh' when ready."
 fi
 

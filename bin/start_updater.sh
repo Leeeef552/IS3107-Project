@@ -7,12 +7,12 @@
 # fetches and loads Bitcoin price data into TimescaleDB.
 #
 # Usage:
-#   ./start_updater.sh [interval_seconds]
+#   ./bin/start_updater.sh [interval_seconds]
 #
 # Example:
-#   ./start_updater.sh          # Update every 1 minute (default)
-#   ./start_updater.sh 30       # Update every 30 seconds
-#   ./start_updater.sh 120      # Update every 2 minutes
+#   ./bin/start_updater.sh          # Update every 1 minute (default)
+#   ./bin/start_updater.sh 30       # Update every 30 seconds
+#   ./bin/start_updater.sh 120      # Update every 2 minutes
 # ============================================================================
 
 set -e

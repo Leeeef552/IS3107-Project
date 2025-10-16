@@ -11,11 +11,11 @@
 # - Python dependencies installed
 #
 # Usage:
-#   ./run_dashboard.sh [port]
+#   ./bin/run_dashboard.sh [port]
 #
 # Examples:
-#   ./run_dashboard.sh          # Launch on default port 8501
-#   ./run_dashboard.sh 8502     # Launch on custom port 8502
+#   ./bin/run_dashboard.sh          # Launch on default port 8501
+#   ./bin/run_dashboard.sh 8502     # Launch on custom port 8502
 # ============================================================================
 
 set -e
@@ -117,7 +117,7 @@ if lsof -Pi :$PORT -sTCP:LISTEN -t > /dev/null 2>&1; then
         kill -9 $PID
         echo "Process killed"
     else
-        echo "Try using a different port: ./run_dashboard.sh 8502"
+        echo "Try using a different port: ./bin/run_dashboard.sh 8502"
         exit 1
     fi
 fi
@@ -143,7 +143,7 @@ echo "  - Press 'r' in dashboard to rerun"
 echo "  - Press Ctrl+C here to stop the dashboard"
 echo ""
 echo "For real-time updates, start the continuous updater:"
-echo "  ./start_updater.sh"
+echo "  ./bin/start_updater.sh"
 echo ""
 echo "=========================================="
 echo ""

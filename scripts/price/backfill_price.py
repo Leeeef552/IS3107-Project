@@ -43,7 +43,7 @@ def check_missing_data(parquet_filename):
 
     last_timestamp = df["Timestamp"].max()
 
-    current_time = datetime.now(SGT) - timedelta(minutes=2)
+    current_time = datetime.now(SGT) - timedelta(minutes=1)
     current_timestamp = int(current_time.timestamp())
 
     last_datetime = datetime.fromtimestamp(last_timestamp, tz=SGT)
