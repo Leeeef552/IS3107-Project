@@ -1,17 +1,70 @@
-# Complete Setup Guide - Bitcoin Price & Sentiment Analysis Platform
+# Complete Setup & Usage Guide - Bitcoin Analytics Platform with Whale Monitoring
 
-This guide provides step-by-step instructions to set up the entire Bitcoin analytics platform from scratch, including database, data pipelines, and interactive dashboard.
+This comprehensive guide covers everything from initial setup to running the complete Bitcoin analytics platform with real-time whale transaction monitoring.
 
 ## Table of Contents
 
-1. [Prerequisites](#prerequisites)
-2. [Environment Setup](#environment-setup)
-3. [Database Setup](#database-setup)
-4. [Data Initialization](#data-initialization)
-5. [Dashboard Launch](#dashboard-launch)
-6. [Continuous Updates](#continuous-updates)
-7. [Verification](#verification)
-8. [Troubleshooting](#troubleshooting)
+1. [System Overview](#system-overview)
+2. [Prerequisites](#prerequisites)
+3. [Initial Setup](#initial-setup)
+4. [Running the Dashboard](#running-the-dashboard)
+5. [Dashboard Features](#dashboard-features)
+6. [Whale Monitoring](#whale-monitoring)
+7. [Configuration](#configuration)
+8. [Monitoring & Maintenance](#monitoring--maintenance)
+9. [Troubleshooting](#troubleshooting)
+10. [Advanced Usage](#advanced-usage)
+
+---
+
+## System Overview
+
+Your Bitcoin analytics platform includes:
+
+1. ✅ **Real-time Bitcoin Prices** - Live OHLCV data from Bitstamp API
+2. ✅ **News Sentiment Analysis** - FinBERT-powered sentiment from multiple sources
+3. ✅ **Fear & Greed Index** - Market sentiment gauge from alternative.me
+4. ✅ **Whale Transaction Monitoring** - Real-time detection of large Bitcoin movements
+5. ✅ **TimescaleDB Backend** - Optimized time-series data storage
+6. ✅ **Interactive Streamlit Dashboard** - Real-time visualization with auto-refresh
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                     DATA SOURCES                                │
+├─────────────────────────────────────────────────────────────────┤
+│  Bitstamp API     NewsAPI/CryptoCompare     Mempool.space      │
+│  (Price Data)     (News Articles)           (Whale Txs)         │
+└────────┬──────────────────┬────────────────────────┬────────────┘
+         │                  │                        │
+         ▼                  ▼                        ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                  BACKGROUND SERVICES                            │
+├─────────────────────────────────────────────────────────────────┤
+│  continuous_updater.py    whale_monitor.py                     │
+│  (Every 60s)              (Every 10s)                           │
+└────────┬──────────────────────────────────────────┬─────────────┘
+         │                                           │
+         ▼                                           ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                     TIMESCALEDB                                 │
+├─────────────────────────────────────────────────────────────────┤
+│  historical_price     news_articles      whale_transactions    │
+│  price_1h/1d/1w       sentiment_1h/1d    whale_stats_1h/1d     │
+└────────┬────────────────────────────────────────────────────────┘
+         │
+         ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                  STREAMLIT DASHBOARD                            │
+├─────────────────────────────────────────────────────────────────┤
+│  - Price Charts       - Sentiment Analysis                     │
+│  - Fear & Greed       - Latest News                             │
+│  - 🐋 Whale Alerts                                              │
+│                                                                 │
+│  Auto-refresh: Every 60 seconds                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
 
 ---
 
@@ -28,7 +81,7 @@ python --version  # Should show 3.8+
 **2. Docker Desktop**
 
 - Download from: https://www.docker.com/products/docker-desktop
-- Install and ensure Docker is running before proceeding
+- Install and ensure Docker is running
 - Verify: `docker --version`
 
 **3. Git**
@@ -45,7 +98,7 @@ git --version
 
 ---
 
-## Environment Setup
+## Initial Setup
 
 ### Step 1: Clone the Repository
 
@@ -56,34 +109,21 @@ cd BT3107-Project
 
 ### Step 2: Set Up Python Environment
 
-**Option A: Use Existing Environment**
-
-If you're already in a virtual environment (conda or venv), skip to Step 3.
-
-```bash
-# Check if you're in an environment
-echo $VIRTUAL_ENV           # For venv
-echo $CONDA_DEFAULT_ENV     # For conda
-```
-
-**Option B: Create New Virtual Environment**
+**Option A: Create New Virtual Environment**
 
 **macOS/Linux:**
-
 ```bash
 python -m venv .venv
 source .venv/bin/activate
 ```
 
 **Windows (Command Prompt):**
-
 ```cmd
 python -m venv .venv
 .venv\Scripts\activate
 ```
 
 **Windows (PowerShell):**
-
 ```powershell
 python -m venv .venv
 .venv\Scripts\Activate.ps1
@@ -97,84 +137,22 @@ pip install -r requirements.txt
 ```
 
 This installs:
-
-**Database & Storage**
-
-- `psycopg2-binary` - PostgreSQL adapter
-- `sqlalchemy` - SQL toolkit and ORM
-- `pandas` - Data manipulation
-- `pyarrow` - Parquet file support
-
-**Sentiment Analysis**
-
-- `transformers` - FinBERT model
-- `torch` - PyTorch framework
-- `vaderSentiment` - Rule-based sentiment
-- `praw` - Reddit API wrapper
-
-**Dashboard & Visualization**
-
+- `pandas`, `numpy` - Data processing
 - `streamlit` - Dashboard framework
 - `plotly` - Interactive charts
-- `pytz` - Timezone handling
-- `watchdog` - File monitoring
+- `psycopg2-binary` - PostgreSQL driver
+- `sqlalchemy` - Database ORM
+- `transformers`, `torch` - FinBERT sentiment analysis
+- `requests`, `aiohttp` - API calls
+- `python-dotenv` - Environment management
+- And more...
 
-**Data Fetching**
+### Step 4: Set Up TimescaleDB
 
-- `requests` - HTTP requests
-- `python-dotenv` - Environment variables
-- `kaggle` - Kaggle API (optional)
-
-### Step 4: Configure API Keys
-
-Create a `.env` file by copying the template:
+**Start TimescaleDB Docker Container:**
 
 ```bash
-cp env.example .env
-```
-
-Edit `.env` with your API keys:
-
-```bash
-# Database Configuration (default for local Docker)
-DB_HOST=localhost
-DB_PORT=5432
-DB_NAME=postgres
-DB_USER=postgres
-DB_PASSWORD=pass
-
-# API Keys (optional, but recommended)
-NEWS_API_KEY=your_newsapi_key_here
-CRYPTOCOMPARE_API_KEY=your_cryptocompare_key
-REDDIT_CLIENT_ID=your_reddit_client_id
-REDDIT_CLIENT_SECRET=your_reddit_secret
-REDDIT_USER_AGENT=BitcoinSentimentBot/1.0
-
-# Kaggle (optional, for alternative data sources)
-KAGGLE_USERNAME=your_kaggle_username
-KAGGLE_KEY=your_kaggle_api_key
-```
-
-**Getting API Keys:**
-
-- **NewsAPI**: Free tier at https://newsapi.org/register (100 requests/day)
-- **CryptoCompare**: Free tier at https://www.cryptocompare.com/cryptopian/api-keys
-- **Reddit**: Create app at https://www.reddit.com/prefs/apps
-- **Kaggle**: Get from https://www.kaggle.com/settings (for Kaggle datasets)
-
----
-
-## Database Setup
-
-### Step 1: Start TimescaleDB Container
-
-Pull and run the TimescaleDB Docker container:
-
-```bash
-docker pull timescale/timescaledb:latest-pg17
-
-docker run -d \
-  --name timescaledb \
+docker run -d --name timescaledb \
   -e POSTGRES_USER=postgres \
   -e POSTGRES_PASSWORD=pass \
   -e POSTGRES_DB=postgres \
@@ -182,577 +160,679 @@ docker run -d \
   timescale/timescaledb:latest-pg17
 ```
 
-**Windows (PowerShell):**
-
-```powershell
-docker run -d `
-  --name timescaledb `
-  -e POSTGRES_USER=postgres `
-  -e POSTGRES_PASSWORD=pass `
-  -e POSTGRES_DB=postgres `
-  -p 5432:5432 `
-  timescale/timescaledb:latest-pg17
-```
-
-### Step 2: Verify Database Connection
+**Verify it's running:**
 
 ```bash
-docker exec timescaledb psql -U postgres -c "SELECT version();"
+docker ps | grep timescaledb
 ```
 
-You should see PostgreSQL and TimescaleDB version information.
+### Step 5: Configure API Keys (Optional)
 
-### Step 3: Check Container Status
+Create a `.env` file for API keys:
 
 ```bash
-docker ps
+cp env.example .env
+nano .env  # Or use your preferred editor
 ```
 
-You should see the `timescaledb` container running on port 5432.
+Add your API keys:
 
----
+```bash
+# Database (already set up)
+TIMESCALE_HOST=localhost
+TIMESCALE_PORT=5432
+TIMESCALE_USER=postgres
+TIMESCALE_PASSWORD=pass
+TIMESCALE_DBNAME=postgres
 
-## Data Initialization
+# News APIs (optional - has free tier limits)
+NEWS_API_KEY=your_newsapi_key_here
+CRYPTOCOMPARE_API_KEY=your_cryptocompare_key
+REDDIT_CLIENT_ID=your_reddit_client_id
+REDDIT_CLIENT_SECRET=your_reddit_secret
+REDDIT_USER_AGENT=BitcoinSentimentBot/1.0
+```
 
-You can initialize all data with a single command or step-by-step.
+**Note:** News sentiment features work with or without API keys, but may have rate limits.
 
-### Option A: Quick Setup (Recommended)
-
-Run the automated setup script:
+### Step 6: Initialize All Data (One Command!)
 
 ```bash
 ./bin/setup_all_data.sh
 ```
 
-This script will:
+This automated script will:
 
-1. Initialize database schema for price data
-2. Download historical Bitcoin price data (2012-present)
-3. Load data into TimescaleDB
-4. Create all continuous aggregates (5min, 1h, 1d, 1w, 1mo)
-5. Optionally initialize news sentiment data
+1. ✅ Download historical Bitcoin price data (2012-present, ~500MB from Kaggle)
+2. ✅ Pull latest updates from Bitstamp API
+3. ✅ Load 7+ million price records into TimescaleDB
+4. ✅ Create continuous aggregates (1min, 5min, 1h, 1d, 1w, 1mo)
+5. ✅ **Initialize whale monitoring database** (NEW!)
+6. ✅ Optionally load sentiment data (7-day backfill)
 
-Follow the prompts to complete setup.
+**Expected output:**
 
-### Option B: Manual Step-by-Step Setup
-
-**Price Data**
-
-```bash
-# Step 1: Initialize price database schema
-python -m scripts.price.init_historical_price
-
-# Step 2: Pull latest price data from Bitstamp
-python -m scripts.price.pull_update_price
-
-# Step 3: Load price data into TimescaleDB
-python -m scripts.price.load_price
-
-# Step 4: Create continuous aggregates
-python -m scripts.price.create_aggregates
 ```
+============================================
+ Bitcoin Analytics - Complete Data Setup
+============================================
 
-**News Sentiment Data (Optional)**
+Step 1/6: Downloading Historical Data
+Step 2/6: Pulling Latest Price Data
+Step 3/6: Loading Data into TimescaleDB
+Step 4/6: Creating Continuous Aggregates
+Step 5/6: Initializing Whale Monitoring     ← NEW!
+Step 6/6: Sentiment Data (Optional)
 
-```bash
-# Step 1: Initialize sentiment database schema
-python -m scripts.news_sentiment.load_sentiment
+[OK] Setup Complete!
 
-# Step 2: Backfill 30 days of news sentiment
-python -m scripts.news_sentiment.update_sentiment --hours 720
-```
+Next steps:
 
-Note: Free API tiers provide limited historical data:
+1. Start continuous updates (Terminal 1):
+   ./bin/start_updater.sh
 
-- NewsAPI: Last 30 days maximum
-- Reddit: Recent posts only
-- CryptoCompare: Limited history on free tier
+2. Start whale monitor (Terminal 2):
+   python scripts/whale_monitor.py --min-btc 50
+   (Or test first: python scripts/test_whale_monitor.py)
 
-### Verification
-
-Check data was loaded successfully:
-
-```bash
-# Check price data
-docker exec timescaledb psql -U postgres -d postgres -c \
-  "SELECT COUNT(*) as total_rows, MIN(time) as earliest, MAX(time) as latest FROM historical_price;"
-
-# Check sentiment data (if loaded)
-docker exec timescaledb psql -U postgres -d postgres -c \
-  "SELECT COUNT(*) as total_articles FROM news_sentiment;"
-
-# Check continuous aggregates
-docker exec timescaledb psql -U postgres -d postgres -c \
-  "SELECT view_name FROM timescaledb_information.continuous_aggregates;"
+3. Launch dashboard (Terminal 3):
+   ./bin/run_dashboard.sh
 ```
 
 ---
 
-## Dashboard Launch
+## Running the Dashboard
 
-### Step 1: Launch the Dashboard
+### Option 1: Step-by-Step (Recommended First Time)
 
+Open **3 terminals** and run these commands:
+
+**Terminal 1** - Start continuous price & sentiment updater:
 ```bash
+cd BT3107-Project
+source .venv/bin/activate  # or: source venv/bin/activate
+./bin/start_updater.sh
+```
+
+**Terminal 2** - Start whale monitor:
+```bash
+cd BT3107-Project
+source .venv/bin/activate
+
+# Test mode first (low threshold to see results quickly)
+python scripts/test_whale_monitor.py
+
+# Then stop (Ctrl+C) and run production mode
+python scripts/whale_monitor.py --min-btc 50
+```
+
+**Terminal 3** - Launch dashboard:
+```bash
+cd BT3107-Project
+source .venv/bin/activate
 ./bin/run_dashboard.sh
 ```
 
-**Windows:**
-
-```cmd
-bin\run_dashboard.bat
-```
-
-**Direct Launch (if scripts don't work):**
-
-```bash
-streamlit run dashboard/app.py
-```
-
-### Step 2: Access Dashboard
-
-The dashboard will automatically open in your browser at:
-
+**Browser** - Open:
 ```
 http://localhost:8501
 ```
 
-If it doesn't open automatically, manually navigate to the URL.
+### Option 2: Background Mode (Long-Term Running)
 
-### Step 3: Dashboard Overview
+```bash
+# Create logs directory
+mkdir -p logs
 
-The dashboard displays:
+# Start all services in background
+source .venv/bin/activate
+./bin/start_updater.sh &
+python scripts/whale_monitor.py --min-btc 50 > logs/whale.log 2>&1 &
 
-**Top Section: Live Price Metrics**
+# Launch dashboard (foreground)
+./bin/run_dashboard.sh
+```
 
-- Current Bitcoin price (USD/SGD selectable)
-- 24-hour high and low
-- Trading volume in selected currency
-- Last updated timestamp (Singapore Time GMT+8)
+### Stopping Services
 
-**Price Chart Section**
+**Foreground mode:**
+```bash
+# Press Ctrl+C in each terminal
+```
 
-- Interactive OHLC candlestick chart with volume
-- Time range selector: Last 24 hours, Last 7 days, Last 30 days
-- Automatic interval selection (5min/1hour/1day)
-- Zoom and pan controls
-
-**News Sentiment Analysis**
-
-- Aggregate sentiment trends over time
-- Article distribution by sentiment (positive/negative/neutral)
-- Time period selector matching price chart options
-
-**Bottom Section (Side-by-Side)**
-
-- Fear & Greed Index: Real-time market sentiment gauge (0-100)
-- Latest News: Top 5 Bitcoin articles with sentiment scores, previews, and links
-
-**Sidebar Controls**
-
-- Currency selector (USD/SGD with live exchange rates)
-- Price chart time range
-- Sentiment analysis period
-- Last updated timestamp
-
-### Dashboard Features
-
-- **Auto-refresh**: Automatically refreshes every 60 seconds (synchronized with price updates)
-- **Responsive**: Works on desktop and tablet screens
-- **Interactive**: Click and drag to zoom on charts
-- **Live data**: Updates from continuous updater if running
-- **Session state**: Maintains selections across refreshes
+**Background mode:**
+```bash
+# Stop all services
+pkill -f continuous_updater
+pkill -f whale_monitor
+pkill -f streamlit
+```
 
 ---
 
-## Continuous Updates
+## Dashboard Features
 
-For real-time operation, run the continuous updater in a separate terminal.
+When you open http://localhost:8501, you'll see:
 
-### Step 1: Start Continuous Updater
+### 1. Price Metrics (Top Section)
 
-```bash
-./bin/start_updater.sh
-```
+- **Current BTC Price** with 24h change
+- **High/Low** for the period
+- **Volume** in BTC and selected currency
+- **Multi-currency support** - Toggle between USD/SGD
+- **Last updated timestamp** (Singapore Time)
 
-**Windows:**
+### 2. Interactive Price Chart
 
-```cmd
-bin\start_updater.bat
-```
+- **OHLCV candlestick charts** with volume bars
+- **Time range selector:**
+  - Last 24 hours (5-min candles)
+  - Last 7 days (1-hour candles)
+  - Last 30 days (1-hour candles)
+- **Responsive full-width layout**
+- **Hover details** for each candle
 
-**Custom Update Interval:**
+### 3. News Sentiment Analysis
 
-```bash
-./bin/start_updater.sh 30    # Update every 30 seconds
-./bin/start_updater.sh 120   # Update every 2 minutes
-```
+- **Aggregate sentiment trends** over time
+- **Article distribution** (positive/negative/neutral stacked bars)
+- **Time period selector:**
+  - Last 24 hours (hourly buckets)
+  - Last 7 days (daily buckets)
+  - Last 30 days (daily buckets)
+- **Data sources:** NewsAPI, CryptoCompare, Reddit
 
-### Step 2: What the Updater Does
+### 4. Fear & Greed Index
 
-**Price Updates (Every 60 seconds)**
+- **Real-time market sentiment gauge** (0-100 scale)
+- **Color-coded indicator:**
+  - Red (0-25): Extreme Fear
+  - Orange (25-55): Fear/Neutral
+  - Green (55-100): Greed/Extreme Greed
+- **Source:** alternative.me API
+- **Updates:** Once per day
 
-- Fetches latest Bitcoin price from Bitstamp API
-- Inserts only new data points (incremental)
-- Refreshes continuous aggregates automatically
+### 5. Latest News
 
-**News Sentiment Updates**
+- **Top 5 recent Bitcoin articles**
+- **Article preview** (150-character excerpts)
+- **Smart timestamps:**
+  - Relative time for < 24 hours ("16h ago")
+  - Full date/time for older articles
+- **Sentiment scores** for each article
+- **Clickable cards** linking to full articles
+- **Scrollable news feed**
 
-- Incremental: Every 5 minutes (fetches last 2 hours)
-- Full refresh: Every 12 hours (fetches last 30 days)
-- Automatic deduplication of articles
+### 6. 🐋 Whale Transaction Alerts (NEW!)
 
-### Step 3: Monitoring the Updater
+- **24-hour summary metrics:**
+  - Number of whale transactions detected
+  - Total BTC volume moved
+  - Largest single whale transaction
+  - Average whale transaction size
 
-The updater logs show:
+- **Dual trend charts:**
+  - Top panel: Whale transaction count (hourly)
+  - Bottom panel: Total BTC volume (hourly)
 
-```
-Update #1 - 2025-10-15 13:49:18
-Step 1: Pulling latest price data from Bitstamp...
-Step 2: Loading NEW price data into TimescaleDB...
-✓ Inserted 12 new rows
-Step 3: Checking for new articles and analyzing sentiment...
-✓ Added 5 new articles
-Update completed successfully. Next update in 60s...
-```
+- **Recent transactions list:**
+  - BTC amount & USD value
+  - Detection time
+  - Transaction status:
+    - ⏳ Mempool (unconfirmed)
+    - ✅ Confirmed (in block)
+  - 🔗 Direct links to mempool.space blockchain explorer
 
-### Step 4: Stopping the Updater
+- **Smart empty state:**
+  - Instructions if no whales detected
+  - Helpful commands to start monitoring
 
-Press `Ctrl+C` in the terminal running the updater.
+### 7. Auto-Refresh
+
+- Dashboard automatically refreshes every **60 seconds**
+- Synchronized with price updater interval
+- Updates all sections: prices, sentiment, news, whales
+- Manual refresh button in sidebar if needed
+- Works with static data if updater isn't running
 
 ---
 
-## Verification
+## Whale Monitoring
 
-### Check Price Data
+### Quick Test
 
-```bash
-# Total rows
-docker exec timescaledb psql -U postgres -d postgres -c \
-  "SELECT COUNT(*) FROM historical_price;"
-
-# Latest price
-docker exec timescaledb psql -U postgres -d postgres -c \
-  "SELECT time, close FROM historical_price ORDER BY time DESC LIMIT 1;"
-
-# Check aggregates
-docker exec timescaledb psql -U postgres -d postgres -c \
-  "SELECT * FROM price_1h ORDER BY bucket DESC LIMIT 5;"
-```
-
-### Check Sentiment Data
+Before running production monitoring, test that it works:
 
 ```bash
-# Total articles
-docker exec timescaledb psql -U postgres -d postgres -c \
-  "SELECT COUNT(*) FROM news_sentiment;"
-
-# Latest articles
-docker exec timescaledb psql -U postgres -d postgres -c \
-  "SELECT time, AVG(sentiment_score) FROM news_sentiment GROUP BY time ORDER BY time DESC LIMIT 5;"
-
-# Daily sentiment summary
-docker exec timescaledb psql -U postgres -d postgres -c \
-  "SELECT * FROM sentiment_1d ORDER BY bucket DESC LIMIT 7;"
+python scripts/test_whale_monitor.py
 ```
 
-### Verify Dashboard Data
+**Expected output within 1-2 minutes:**
+```
+🐋 Starting whale monitor (threshold: 0.01 BTC)
+API: https://mempool.space/api/mempool/recent
+💎 Whale detected: 1.25 BTC ($136,962) - TX: 8a3f2b1c...
+💎 Whale detected: 56.04 BTC ($6,140,134) - TX: 13f92cac...
+```
 
-1. Open dashboard at `http://localhost:8501`
-2. Check that current price is displayed
-3. Verify price chart shows historical data
-4. Confirm sentiment analysis section has data
-5. Check Fear & Greed Index loads
-6. Verify news articles appear with sentiment scores
+Press `Ctrl+C` after seeing transactions, then check the database:
+
+```bash
+docker exec timescaledb psql -U postgres -d postgres -c \
+  "SELECT detected_at, value_btc, value_usd, SUBSTRING(txid, 1, 16) as tx
+   FROM whale_transactions ORDER BY detected_at DESC LIMIT 5;"
+```
+
+### Production Monitoring
+
+```bash
+# Default: 50 BTC threshold (recommended)
+python scripts/whale_monitor.py --min-btc 50
+
+# Custom thresholds:
+python scripts/whale_monitor.py --min-btc 10   # More sensitive
+python scripts/whale_monitor.py --min-btc 100  # Mega whales only
+```
+
+### Choosing a Threshold
+
+| Threshold | USD Value (~$110K BTC) | Description | Frequency |
+|-----------|------------------------|-------------|-----------|
+| 0.01 BTC | $1,100 | Testing only | Every few minutes |
+| 1 BTC | $110,000 | Retail investors | Few per hour |
+| 10 BTC | $1.1M | High net worth | Hourly |
+| **50 BTC** | **$5.5M** | **Whales (default)** | **Few per day** |
+| 100 BTC | $11M | Mega whales | Rare |
+| 500 BTC | $55M | Institutional | Very rare |
+
+### Background Mode
+
+```bash
+mkdir -p logs
+nohup python scripts/whale_monitor.py --min-btc 50 > logs/whale.log 2>&1 &
+
+# Check it's running
+ps aux | grep whale_monitor
+
+# View live logs
+tail -f logs/whale.log
+
+# Stop it
+pkill -f whale_monitor
+```
+
+### How Whale Detection Works
+
+The whale monitor:
+
+1. **Polls mempool.space API** every 10 seconds
+2. **Checks recent transactions** in Bitcoin's mempool (unconfirmed txs)
+3. **Detects large transactions** exceeding your threshold
+4. **Fetches BTC price** from CoinGecko every 5 minutes
+5. **Calculates USD value** for each transaction
+6. **Stores in database** with timestamp and status
+7. **Updates continuous aggregates** hourly and daily
+
+**Why mempool?** You see large transactions **before they're confirmed** (~10 min advance notice), giving real-time intelligence on whale movements.
+
+For technical details, see: [WHALE_MONITOR_EXPLAINED.md](WHALE_MONITOR_EXPLAINED.md)
+
+---
+
+## Configuration
+
+### Whale Monitor Threshold
+
+Adjust when starting the monitor:
+
+```bash
+python scripts/whale_monitor.py --min-btc 100
+```
+
+### Dashboard Refresh Rate
+
+Default: 60 seconds. To change, edit `dashboard/app.py`:
+
+```python
+time.sleep(60)  # Change this value
+st.rerun()
+```
+
+### Price Update Frequency
+
+Default: 60 seconds. To change:
+
+```bash
+./bin/start_updater.sh 30  # Update every 30 seconds
+```
+
+### Dashboard Settings
+
+Configuration in `dashboard/.streamlit/config.toml`:
+
+- Theme colors
+- Server port (default: 8501)
+- CORS settings
+- File watcher options
+
+---
+
+## Monitoring & Maintenance
+
+### Check Running Services
+
+```bash
+# Price updater
+ps aux | grep continuous_updater
+
+# Whale monitor
+ps aux | grep whale_monitor
+
+# Dashboard
+ps aux | grep streamlit
+```
+
+### View Logs
+
+```bash
+# Whale monitor (if running in background)
+tail -f logs/whale.log
+
+# Dashboard logs appear in terminal where it's running
+```
+
+### Check Database Status
+
+**Price data:**
+```bash
+docker exec timescaledb psql -U postgres -d postgres -c \
+  "SELECT COUNT(*) as rows, MAX(time) as latest FROM historical_price;"
+```
+
+**Whale data:**
+```bash
+docker exec timescaledb psql -U postgres -d postgres -c \
+  "SELECT COUNT(*) as whales, SUM(value_btc) as total_btc
+   FROM whale_transactions;"
+```
+
+**Sentiment data:**
+```bash
+docker exec timescaledb psql -U postgres -d postgres -c \
+  "SELECT COUNT(*) as articles FROM news_articles;"
+```
+
+**Continuous aggregates:**
+```bash
+docker exec timescaledb psql -U postgres -d postgres -c \
+  "SELECT view_name FROM timescaledb_information.continuous_aggregates
+   ORDER BY view_name;"
+```
+
+### Database Size
+
+```bash
+docker exec timescaledb psql -U postgres -d postgres -c \
+  "SELECT pg_size_pretty(pg_database_size('postgres'));"
+```
 
 ---
 
 ## Troubleshooting
 
-### Docker Issues
+### Dashboard shows "No whale transactions detected"
 
-**Container won't start:**
+**Cause:** Whale monitor not running or threshold too high
 
+**Solution:**
 ```bash
-# Check if port 5432 is already in use
-lsof -i :5432  # macOS/Linux
-netstat -ano | findstr :5432  # Windows
+# Check if running
+ps aux | grep whale_monitor
 
-# Stop conflicting process or use different port
-docker run -d --name timescaledb -p 5433:5432 ...
+# If not running, start with low threshold for testing
+python scripts/whale_monitor.py --min-btc 0.1
+
+# Check database
+docker exec timescaledb psql -U postgres -d postgres -c \
+  "SELECT COUNT(*) FROM whale_transactions;"
 ```
 
-**Container stops immediately:**
+### "Module not found" errors
 
+**Solution:**
 ```bash
+# Activate virtual environment
+source .venv/bin/activate  # or: source venv/bin/activate
+
+# Install all dependencies
+pip install -r requirements.txt
+
+# Install whale monitor dependency
+pip install aiohttp
+```
+
+### TimescaleDB not running
+
+**Solution:**
+```bash
+# Check Docker
+docker ps | grep timescaledb
+
+# Start if stopped
+docker start timescaledb
+
+# Or create new container
+docker run -d --name timescaledb \
+  -e POSTGRES_USER=postgres \
+  -e POSTGRES_PASSWORD=pass \
+  -e POSTGRES_DB=postgres \
+  -p 5432:5432 \
+  timescale/timescaledb:latest-pg17
+```
+
+### "Database connection failed"
+
+**Solution:**
+```bash
+# Check Docker is running
+docker ps
+
+# Restart TimescaleDB
+docker restart timescaledb
+
 # Check logs
 docker logs timescaledb
 
-# Common issues:
-# - Insufficient memory: Increase Docker memory limit
-# - Corrupted data: Remove container and recreate
-docker rm timescaledb
+# Test connection
+docker exec timescaledb psql -U postgres -d postgres -c "SELECT NOW();"
 ```
 
-### Database Connection Errors
+### No price data showing
 
-**"could not connect to server":**
-
+**Solution:**
 ```bash
-# Verify container is running
-docker ps
-
-# Restart container
-docker restart timescaledb
-
-# Check database is accessible
-docker exec timescaledb psql -U postgres -c "SELECT 1;"
-```
-
-**"relation does not exist":**
-
-```bash
-# Recreate database schema
-python -m scripts.load_price
-
-# Recreate aggregates
-python -m scripts.create_aggregates
-```
-
-### Price Data Issues
-
-**No historical data:**
-
-```bash
-# Check parquet file exists
-ls -lh historical_data/btcusd_1-min_data.parquet
-
-# Re-download if missing
-python -m scripts.init_historical_price
-
-# Reload into database
-python -m scripts.load_price
-```
-
-**Price not updating:**
-
-```bash
-# Check continuous updater is running
-ps aux | grep continuous_updater
-
-# Restart updater
-./bin/start_updater.sh
-
-# Manually pull latest data
-python -m scripts.pull_update_price
-python -m scripts.load_price
-```
-
-### Sentiment Analysis Issues
-
-**No news articles:**
-
-```bash
-# Check API keys in .env file
-cat .env | grep API
-
-# Manually fetch news
-python -m scripts.news_sentiment.fetch_news
-
-# Load sentiment data
-python -m scripts.news_sentiment.update_sentiment --hours 24
-```
-
-**Sentiment not displaying:**
-
-```bash
-# Check sentiment aggregates exist
+# Check if data exists
 docker exec timescaledb psql -U postgres -d postgres -c \
-  "\d sentiment_1d"
+  "SELECT COUNT(*) FROM historical_price;"
 
-# Refresh aggregates manually
+# If zero, re-run setup
+./bin/setup_all_data.sh
+
+# Check aggregates exist
 docker exec timescaledb psql -U postgres -d postgres -c \
-  "CALL refresh_continuous_aggregate('sentiment_1d', NULL, NULL);"
+  "\\d+ price_1h"
 ```
 
-**Article timestamps incorrect (showing 8 hours ahead):**
+### Whale schema not initialized
 
-This was a timezone bug that has been fixed. If you see incorrect timestamps:
-
+**Solution:**
 ```bash
-# Clear articles with wrong timestamps
-docker exec timescaledb psql -U postgres -d postgres -c "TRUNCATE news_articles CASCADE;"
+# Manually initialize
+docker exec -i timescaledb psql -U postgres -d postgres < schema/init_whale_db.sql
 
-# Reload with correct UTC timestamps
-python -m scripts.news_sentiment.load_sentiment
-python -m scripts.news_sentiment.update_sentiment --hours 720
+# Verify
+docker exec timescaledb psql -U postgres -d postgres -c \
+  "\\dt whale_transactions"
 ```
 
-The fix ensures all article timestamps are stored as UTC in the database.
+### Dashboard not updating
 
-### Dashboard Issues
+**Possible causes:**
 
-**Port 8501 already in use:**
+1. **Continuous updater not running**
+   ```bash
+   ps aux | grep continuous_updater
+   ./bin/start_updater.sh  # If not running
+   ```
 
+2. **Data is stale**
+   - Check "Last Updated" timestamp in dashboard
+   - Should be within last 60-120 seconds
+
+3. **Database connectivity issues**
+   ```bash
+   docker ps | grep timescaledb
+   docker restart timescaledb
+   ```
+
+### Port already in use (8501)
+
+**Solution:**
 ```bash
-# Find and kill process
+# Find process using port 8501
 lsof -i :8501
+
+# Kill the process
 kill -9 <PID>
 
 # Or use different port
 streamlit run dashboard/app.py --server.port 8502
 ```
 
-**Dashboard shows no data:**
+---
 
-1. Verify database connection in dashboard logs
-2. Check data exists in database
-3. Clear Streamlit cache: Press `C` in dashboard
-4. Restart dashboard
+## Advanced Usage
 
-**Dashboard not auto-refreshing:**
+### Custom Data Queries
 
-- Dashboard automatically refreshes every 60 seconds (aligned with continuous updater)
-- Works with static data if updater is not running
-- If refresh seems stuck, check browser console for errors (Press `F12`)
-- Manual refresh: Press `R` in browser or use "Refresh Now" button in sidebar
-
-### API Rate Limiting
-
-**NewsAPI rate limit exceeded:**
-
+**Connect to database:**
 ```bash
-# Increase update interval
-./bin/start_updater.sh 300  # 5 minutes
-
-# Use other sources (CryptoCompare, Reddit don't require NewsAPI)
+docker exec -it timescaledb psql -U postgres -d postgres
 ```
 
-**Too many requests errors:**
+**Example queries:**
 
-- Add API keys to `.env` for higher limits
-- Reduce update frequency
-- Check logs for actual API usage
-
-### Memory Issues
-
-**"Killed" or OOM errors:**
-
-```bash
-# Increase Docker memory limit (Docker Desktop settings)
-# Minimum: 4GB, Recommended: 8GB
-
-# Reduce batch size in scripts
-# Edit configs/config.py: BATCH_SIZE = 1000 (down from 10000)
+**Top 10 largest whales:**
+```sql
+SELECT detected_at, value_btc, value_usd, SUBSTRING(txid, 1, 20) as tx
+FROM whale_transactions
+ORDER BY value_btc DESC
+LIMIT 10;
 ```
 
-### Virtual Environment Issues
-
-**Module not found:**
-
-```bash
-# Ensure virtual environment is activated
-source .venv/bin/activate  # Linux/Mac
-.venv\Scripts\activate     # Windows
-
-# Reinstall requirements
-pip install -r requirements.txt
+**Today's whale activity:**
+```sql
+SELECT
+  COUNT(*) as whale_count,
+  SUM(value_btc) as total_btc,
+  SUM(value_usd) as total_usd,
+  AVG(value_btc) as avg_btc,
+  MAX(value_btc) as largest_btc
+FROM whale_transactions
+WHERE detected_at > CURRENT_DATE;
 ```
 
-**Permission denied on shell scripts:**
+**Hourly whale trends (last 24h):**
+```sql
+SELECT bucket, transaction_count, total_btc, max_btc
+FROM whale_stats_1h
+WHERE bucket > NOW() - INTERVAL '24 hours'
+ORDER BY bucket DESC;
+```
 
+**Price volatility:**
+```sql
+SELECT
+  bucket,
+  close,
+  (high - low) / low * 100 as volatility_percent
+FROM price_1d
+WHERE bucket > NOW() - INTERVAL '30 days'
+ORDER BY volatility_percent DESC
+LIMIT 10;
+```
+
+### Data Export
+
+**Export whale transactions to CSV:**
 ```bash
-# Make scripts executable
-chmod +x bin/*.sh
+docker exec timescaledb psql -U postgres -d postgres -c \
+  "COPY (SELECT * FROM whale_transactions ORDER BY detected_at DESC LIMIT 1000)
+   TO STDOUT WITH CSV HEADER" > whale_transactions.csv
+```
 
-# Or run with bash explicitly
-bash bin/run_dashboard.sh
+**Export price data:**
+```bash
+docker exec timescaledb psql -U postgres -d postgres -c \
+  "COPY (SELECT * FROM price_1d ORDER BY bucket DESC LIMIT 365)
+   TO STDOUT WITH CSV HEADER" > btc_prices_daily.csv
+```
+
+### Manual Data Updates
+
+**Update price data manually:**
+```bash
+python -m scripts.price.backfill_price
+python -m scripts.price.load_price
+```
+
+**Update sentiment data:**
+```bash
+python -m scripts.news_sentiment.update_sentiment --hours 168  # 7 days
+```
+
+**Refresh aggregates:**
+```bash
+docker exec timescaledb psql -U postgres -d postgres -c \
+  "CALL refresh_continuous_aggregate('price_1h', NULL, NULL);"
 ```
 
 ---
 
-## Next Steps
+## Complete Startup Checklist
 
-After successful setup:
-
-1. **Let updater run** to build historical sentiment data over time
-2. **Explore dashboard features** - try different time ranges and currencies
-3. **Monitor performance** - check update logs and database size
-4. **Customize** - modify dashboard layout or add features in `dashboard/app.py`
-5. **Export data** - use query scripts for analysis and ML models
-
----
-
-## Getting Help
-
-**For detailed documentation:**
-
-- Main README: `README.md`
-- Dashboard docs: `dashboard/README.md`
-- Script usage: `python -m scripts.<script_name> --help`
-
-**Common resources:**
-
-- TimescaleDB docs: https://docs.timescale.com
-- Streamlit docs: https://docs.streamlit.io
-- FinBERT model: https://huggingface.co/ProsusAI/finbert
-
-**System information:**
-
-```bash
-# Python version
-python --version
-
-# Docker version
-docker --version
-
-# Database version
-docker exec timescaledb psql -U postgres -c "SELECT version();"
-
-# Installed packages
-pip list
-```
+- [ ] TimescaleDB running (`docker ps | grep timescaledb`)
+- [ ] Virtual environment activated (`source .venv/bin/activate`)
+- [ ] Dependencies installed (`pip list | grep streamlit`)
+- [ ] Database initialized (`./bin/setup_all_data.sh` completed)
+- [ ] Continuous updater running (`ps aux | grep continuous_updater`)
+- [ ] Whale monitor running (`ps aux | grep whale_monitor`)
+- [ ] Dashboard running (`ps aux | grep streamlit`)
+- [ ] Browser open to `http://localhost:8501`
+- [ ] Whale section visible at bottom of dashboard
+- [ ] Data updating (check "Last Updated" timestamp)
 
 ---
 
-## Summary Commands
+## Documentation
 
-**Quick start from scratch:**
+- **This file** - Complete setup and usage guide
+- **[README.md](README.md)** - Project overview
+- **[WHALE_MONITOR_EXPLAINED.md](WHALE_MONITOR_EXPLAINED.md)** - Technical deep dive on whale detection
+- **[dashboard/README.md](dashboard/README.md)** - Dashboard-specific documentation
 
-```bash
-# 1. Start database
-docker run -d --name timescaledb -e POSTGRES_PASSWORD=pass -p 5432:5432 timescale/timescaledb:latest-pg17
+---
 
-# 2. Initialize all data
-./bin/setup_all_data.sh
+## Support
 
-# 3. Start updater (Terminal 1)
-./bin/start_updater.sh
+For issues or questions:
 
-# 4. Launch dashboard (Terminal 2)
-./bin/run_dashboard.sh
-```
+1. Check this guide's troubleshooting section
+2. Verify all services are running
+3. Check database connectivity
+4. Review logs for error messages
+5. Ensure API keys are configured (if using news features)
 
-**Daily operation:**
+---
 
-```bash
-# Terminal 1: Updater (keep running)
-./bin/start_updater.sh
-
-# Terminal 2: Dashboard (access at http://localhost:8501)
-./bin/run_dashboard.sh
-```
-
-**Maintenance:**
-
-```bash
-# Check database size
-docker exec timescaledb psql -U postgres -c "\l+"
-
-# Backup database
-docker exec timescaledb pg_dump -U postgres postgres > backup.sql
-
-# Clean old Docker images
-docker system prune
-```
-
-You're now ready to use the Bitcoin Price & Sentiment Analysis Platform!
+**You're all set!** Your Bitcoin analytics platform with whale monitoring is ready to launch. Start with the [Running the Dashboard](#running-the-dashboard) section and enjoy real-time Bitcoin intelligence! 🚀🐋

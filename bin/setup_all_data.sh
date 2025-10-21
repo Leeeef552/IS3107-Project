@@ -107,9 +107,21 @@ echo ""
 echo "[OK] Continuous aggregates created"
 echo ""
 
-# Step 5: Sentiment data (optional)
+# Step 5: Initialize whale monitoring database
 echo "============================================"
-echo "Step 5/5: Sentiment Data (Optional)"
+echo "Step 5/6: Initializing Whale Monitoring"
+echo "============================================"
+echo "Setting up whale transaction tracking..."
+echo ""
+
+docker exec -i timescaledb psql -U postgres -d postgres < schema/init_whale_db.sql > /dev/null 2>&1
+
+echo "[OK] Whale monitoring database initialized"
+echo ""
+
+# Step 6: Sentiment data (optional)
+echo "============================================"
+echo "Step 6/6: Sentiment Data (Optional)"
 echo "============================================"
 read -p "Do you want to load sentiment data? (y/n) " -n 1 -r
 echo ""
@@ -146,11 +158,15 @@ echo ""
 
 echo "Next steps:"
 echo ""
-echo "1. Launch dashboard:"
-echo "   ./bin/run_dashboard.sh"
-echo ""
-echo "2. Start continuous updates (in another terminal):"
+echo "1. Start continuous updates (Terminal 1):"
 echo "   ./bin/start_updater.sh"
+echo ""
+echo "2. Start whale monitor (Terminal 2):"
+echo "   python scripts/whale_monitor.py --min-btc 50"
+echo "   (Or test first: python scripts/test_whale_monitor.py)"
+echo ""
+echo "3. Launch dashboard (Terminal 3):"
+echo "   ./bin/run_dashboard.sh"
 echo ""
 echo "Dashboard will be available at: http://localhost:8501"
 echo ""
