@@ -26,7 +26,10 @@ from dashboard.data_queries import (
     get_price_history,
     get_latest_articles,
     get_sentiment_summary,
-    get_fear_greed_index
+    get_fear_greed_index,
+    get_recent_whale_transactions,
+    get_whale_stats,
+    get_whale_trend
 )
 
 # Page configuration
@@ -342,6 +345,61 @@ def create_fear_greed_gauge(fng_data):
     return fig
 
 
+def create_whale_chart(df):
+    """Create whale transaction volume chart"""
+    if df.empty:
+        return None
+
+    fig = make_subplots(
+        rows=2, cols=1,
+        shared_xaxes=True,
+        vertical_spacing=0.1,
+        subplot_titles=('Whale Transaction Count', 'Total BTC Volume'),
+        row_heights=[0.5, 0.5]
+    )
+
+    # Transaction count bar chart
+    fig.add_trace(
+        go.Bar(
+            x=df['bucket'],
+            y=df['transaction_count'],
+            name='Whale Txs',
+            marker_color='#FF9500',
+            hovertemplate='<b>%{y}</b> whales<br>%{x}<extra></extra>'
+        ),
+        row=1, col=1
+    )
+
+    # BTC volume area chart
+    fig.add_trace(
+        go.Scatter(
+            x=df['bucket'],
+            y=df['total_btc'],
+            mode='lines+markers',
+            name='Total BTC',
+            line=dict(color='#10B981', width=3),
+            fill='tozeroy',
+            fillcolor='rgba(16, 185, 129, 0.2)',
+            hovertemplate='<b>%{y:.2f} BTC</b><br>%{x}<extra></extra>'
+        ),
+        row=2, col=1
+    )
+
+    fig.update_layout(
+        height=400,
+        template='plotly_dark',
+        hovermode='x unified',
+        showlegend=False,
+        margin=dict(l=50, r=50, t=50, b=50)
+    )
+
+    fig.update_yaxes(title_text="Count", row=1, col=1)
+    fig.update_yaxes(title_text="BTC", row=2, col=1)
+    fig.update_xaxes(title_text="Time", row=2, col=1)
+
+    return fig
+
+
 def main():
     """Main dashboard function"""
     
@@ -647,10 +705,153 @@ def main():
             st.markdown('</div>', unsafe_allow_html=True)
         else:
             st.info("No articles available. Run sentiment analysis scripts first.")
-    
+
+    st.divider()
+
+    # Section 4: Whale Transaction Alerts
+    st.subheader("🐋 Whale Transaction Alerts")
+
+    # Get whale statistics
+    whale_stats = get_whale_stats(period_hours=24)
+
+    if whale_stats and whale_stats['transaction_count'] > 0:
+        # Display summary metrics
+        col1, col2, col3, col4 = st.columns(4)
+
+        with col1:
+            st.metric(
+                label="Whales (24h)",
+                value=int(whale_stats['transaction_count'])
+            )
+
+        with col2:
+            st.metric(
+                label="Total Volume",
+                value=f"{whale_stats['total_btc']:,.2f} BTC",
+                delta=f"${whale_stats['total_usd']/1_000_000:,.1f}M",
+                delta_color="off"
+            )
+
+        with col3:
+            st.metric(
+                label="Largest Whale",
+                value=f"{whale_stats['max_btc']:,.2f} BTC"
+            )
+
+        with col4:
+            st.metric(
+                label="Average Size",
+                value=f"{whale_stats['avg_btc']:,.2f} BTC"
+            )
+
+        # Two column layout for chart and transactions
+        col_chart, col_txs = st.columns([2, 1])
+
+        with col_chart:
+            # Whale trend chart
+            whale_trend = get_whale_trend(interval='1 hour', limit=24)
+            if not whale_trend.empty:
+                whale_chart = create_whale_chart(whale_trend)
+                if whale_chart:
+                    st.plotly_chart(whale_chart, use_container_width=True)
+            else:
+                st.info("Building whale trend data... Check back soon.")
+
+        with col_txs:
+            st.markdown("**Recent Whale Transactions**")
+
+            # Get recent whales
+            whales = get_recent_whale_transactions(limit=8)
+
+            if not whales.empty:
+                for _, whale in whales.iterrows():
+                    # Format time
+                    if pd.notna(whale.get('detected_at')):
+                        detected_time = whale['detected_at']
+                        time_str = detected_time.strftime('%H:%M')
+                    else:
+                        time_str = "N/A"
+
+                    # Get transaction link
+                    txid = whale['txid']
+                    tx_short = f"{txid[:8]}...{txid[-6:]}"
+                    explorer_url = f"https://mempool.space/tx/{txid}"
+
+                    # Status indicator
+                    status = whale.get('status', 'mempool')
+                    if status == 'confirmed':
+                        status_icon = "✅"
+                        status_color = "#10B981"
+                    else:
+                        status_icon = "⏳"
+                        status_color = "#F59E0B"
+
+                    # Display whale card
+                    st.markdown(f"""
+                    <div style="background: linear-gradient(135deg, #2C2C2C 0%, #1E1E1E 100%);
+                                border-radius: 8px; padding: 12px; margin-bottom: 10px;
+                                border-left: 3px solid #FF9500;">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <div style="font-size: 0.85rem; font-weight: bold; color: #FF9500;">
+                                    {whale['value_btc']:.2f} BTC
+                                </div>
+                                <div style="font-size: 0.7rem; color: #888;">
+                                    ${whale['value_usd']:,.0f}
+                                </div>
+                            </div>
+                            <div style="text-align: right;">
+                                <div style="font-size: 0.7rem; color: #888;">
+                                    {time_str}
+                                </div>
+                                <div style="font-size: 0.75rem; color: {status_color};">
+                                    {status_icon} {status.title()}
+                                </div>
+                            </div>
+                        </div>
+                        <div style="margin-top: 8px;">
+                            <a href="{explorer_url}" target="_blank"
+                               style="color: #10B981; text-decoration: none; font-size: 0.7rem;">
+                                🔗 {tx_short}
+                            </a>
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+            else:
+                st.info("No recent whale transactions")
+
+    else:
+        st.info("🔍 No whale transactions detected in the last 24 hours. The whale monitor may be starting up or the threshold may be too high. Try running: `python scripts/test_whale_monitor.py`")
+
+        # Show helpful info
+        with st.expander("ℹ️ How to start whale monitoring"):
+            st.markdown("""
+            **Quick Test (Recommended First)**
+            ```bash
+            python scripts/test_whale_monitor.py
+            ```
+            This runs with a low threshold (0.01 BTC) to quickly verify the system works.
+
+            **Production Monitoring**
+            ```bash
+            # Default: 50 BTC threshold
+            python scripts/whale_monitor.py
+
+            # Custom threshold
+            python scripts/whale_monitor.py --min-btc 10
+            ```
+
+            **Check if monitor is running**
+            ```bash
+            ps aux | grep whale_monitor
+            ```
+
+            See [WHALE_MONITOR_README.md](https://github.com/your-repo) for full documentation.
+            """)
+
     # Footer
     st.divider()
-    st.caption("Data sources: Bitstamp (prices), NewsAPI/CryptoCompare/Reddit (news), Alternative.me (Fear & Greed)")
+    st.caption("Data sources: Bitstamp (prices), NewsAPI/CryptoCompare/Reddit (news), Alternative.me (Fear & Greed), Mempool.space (whale txs)")
     st.caption("This dashboard is for educational purposes only. Not financial advice.")
     
     # Auto-refresh every 60 seconds (aligned with continuous_updater.py price updates)

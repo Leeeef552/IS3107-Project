@@ -201,4 +201,7 @@ def backfill_price(currency_pair="btcusd", parquet_filename=PARQUET_PATH, **kwar
     log.info("=== Crypto Data Updater Finished ===")
     return parquet_filename
 
-backfill_price()
+
+if __name__ == "__main__":
+    result = backfill_price()
+    print(f"Backfill complete: {result}")

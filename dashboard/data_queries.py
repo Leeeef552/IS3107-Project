@@ -283,19 +283,19 @@ def get_exchange_rate(base='USD', target='SGD'):
 def test_database_connection():
     """
     Test database connection and verify tables exist
-    
+
     Returns:
         Dictionary with connection status and available tables
     """
     engine = get_db_engine()
     if engine is None:
         return {'connected': False, 'tables': []}
-    
+
     try:
         query = """
-        SELECT table_name 
-        FROM information_schema.tables 
-        WHERE table_schema = 'public' 
+        SELECT table_name
+        FROM information_schema.tables
+        WHERE table_schema = 'public'
         AND table_type = 'BASE TABLE'
         ORDER BY table_name
         """
@@ -310,4 +310,137 @@ def test_database_connection():
             'error': str(e),
             'tables': []
         }
+
+
+# ==============================================================================
+# WHALE TRANSACTION QUERIES
+# ==============================================================================
+
+@st.cache_data(ttl=30)  # Cache for 30 seconds for near-real-time updates
+def get_recent_whale_transactions(limit=10):
+    """
+    Fetch recent whale transactions
+
+    Args:
+        limit: Maximum number of transactions to fetch
+
+    Returns:
+        DataFrame with recent whale transactions
+    """
+    engine = get_db_engine()
+    if engine is None:
+        return pd.DataFrame()
+
+    try:
+        query = f"""
+        SELECT
+            txid,
+            detected_at,
+            value_btc,
+            value_usd,
+            btc_price_at_detection,
+            status,
+            confirmation_time,
+            EXTRACT(EPOCH FROM (confirmation_time - detected_at))/60 AS confirmation_minutes
+        FROM whale_transactions
+        ORDER BY detected_at DESC
+        LIMIT {limit}
+        """
+        df = pd.read_sql_query(query, engine)
+
+        # Convert to Singapore time
+        if not df.empty and 'detected_at' in df.columns:
+            import pytz
+            singapore_tz = pytz.timezone('Asia/Singapore')
+            if df['detected_at'].dt.tz is None:
+                df['detected_at'] = pd.to_datetime(df['detected_at']).dt.tz_localize('UTC').dt.tz_convert(singapore_tz)
+            else:
+                df['detected_at'] = pd.to_datetime(df['detected_at']).dt.tz_convert(singapore_tz)
+
+        return df
+    except Exception as e:
+        st.warning(f"Could not fetch whale transactions: {str(e)}")
+        return pd.DataFrame()
+
+
+@st.cache_data(ttl=60)
+def get_whale_stats(period_hours=24):
+    """
+    Get whale transaction statistics for a given period
+
+    Args:
+        period_hours: Number of hours to look back
+
+    Returns:
+        Dictionary with whale statistics
+    """
+    engine = get_db_engine()
+    if engine is None:
+        return None
+
+    try:
+        query = f"""
+        SELECT
+            COUNT(*) as transaction_count,
+            SUM(value_btc) as total_btc,
+            SUM(value_usd) as total_usd,
+            AVG(value_btc) as avg_btc,
+            MAX(value_btc) as max_btc,
+            MIN(value_btc) as min_btc
+        FROM whale_transactions
+        WHERE detected_at > NOW() - INTERVAL '{period_hours} hours'
+        """
+        df = pd.read_sql_query(query, engine)
+
+        if not df.empty:
+            return df.iloc[0].to_dict()
+        return None
+    except Exception as e:
+        st.warning(f"Could not fetch whale stats: {str(e)}")
+        return None
+
+
+@st.cache_data(ttl=300)
+def get_whale_trend(interval='1 hour', limit=24):
+    """
+    Get whale transaction trends over time
+
+    Args:
+        interval: Time interval ('1 hour', '1 day')
+        limit: Number of intervals to fetch
+
+    Returns:
+        DataFrame with whale transaction trends
+    """
+    engine = get_db_engine()
+    if engine is None:
+        return pd.DataFrame()
+
+    try:
+        # Map interval to aggregate table
+        table_map = {
+            '1 hour': 'whale_stats_1h',
+            '1 day': 'whale_stats_1d'
+        }
+
+        table = table_map.get(interval, 'whale_stats_1h')
+
+        query = f"""
+        SELECT
+            bucket,
+            transaction_count,
+            total_btc,
+            total_usd,
+            avg_btc,
+            max_btc
+        FROM {table}
+        ORDER BY bucket DESC
+        LIMIT {limit}
+        """
+        df = pd.read_sql_query(query, engine)
+        df = df.sort_values('bucket')  # Sort ascending for charts
+        return df
+    except Exception as e:
+        st.warning(f"Could not fetch whale trends: {str(e)}")
+        return pd.DataFrame()
 
