@@ -15,6 +15,10 @@ CREATE TABLE whale_transactions (
     fee_btc DOUBLE PRECISION,
     input_count INTEGER,
     output_count INTEGER,
+    input_addresses TEXT[],   -- Array of source addresses
+    output_addresses TEXT[],  -- Array of destination addresses
+    primary_input_address TEXT,  -- Main input address (usually first)
+    primary_output_address TEXT, -- Main output address (usually largest)
     notes TEXT,
     PRIMARY KEY (txid, detected_at)
 );

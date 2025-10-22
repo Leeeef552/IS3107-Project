@@ -381,7 +381,17 @@ When you open http://localhost:8501, you'll see:
   - Transaction status:
     - ⏳ Mempool (unconfirmed)
     - ✅ Confirmed (in block)
+  - **Address tracking:**
+    - 📤 From address (source)
+    - 📥 To address (destination)
+    - Color-coded badges: Legacy, Multisig, SegWit, Taproot
+    - Clickable addresses linking to blockchain explorer
   - 🔗 Direct links to mempool.space blockchain explorer
+
+**Understanding Bitcoin Addresses:** See [BITCOIN_ADDRESSES_EXPLAINED.md](BITCOIN_ADDRESSES_EXPLAINED.md) for detailed guide on:
+- How to decode address types (Legacy, Multisig, SegWit, Taproot)
+- What address patterns reveal about transactions
+- Common whale transaction patterns (exchange withdrawals, institutional transfers, etc.)
 
 - **Smart empty state:**
   - Instructions if no whales detected

@@ -341,6 +341,10 @@ def get_recent_whale_transactions(limit=10):
             btc_price_at_detection,
             status,
             confirmation_time,
+            primary_input_address,
+            primary_output_address,
+            input_addresses,
+            output_addresses,
             EXTRACT(EPOCH FROM (confirmation_time - detected_at))/60 AS confirmation_minutes
         FROM whale_transactions
         ORDER BY detected_at DESC

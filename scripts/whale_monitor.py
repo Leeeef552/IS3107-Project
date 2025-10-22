@@ -84,6 +84,29 @@ class WhaleMonitor:
             await self.get_btc_price()
             await asyncio.sleep(300)  # 5 minutes
 
+    async def fetch_transaction_details(self, txid):
+        """
+        Fetch full transaction details including addresses from mempool.space
+
+        Args:
+            txid: Transaction ID
+
+        Returns:
+            dict with transaction details or None if failed
+        """
+        try:
+            await self.init_session()
+            tx_url = f"https://mempool.space/api/tx/{txid}"
+            async with self.session.get(tx_url, timeout=10) as resp:
+                if resp.status == 200:
+                    return await resp.json()
+                else:
+                    log.warning(f"Failed to fetch tx details for {txid[:8]}: {resp.status}")
+                    return None
+        except Exception as e:
+            log.error(f"Error fetching tx details: {e}")
+            return None
+
     def save_whale_transaction(self, txid, value_sats, tx_data=None):
         """
         Save whale transaction to database
@@ -91,7 +114,7 @@ class WhaleMonitor:
         Args:
             txid: Transaction ID
             value_sats: Transaction value in satoshis
-            tx_data: Additional transaction data (optional)
+            tx_data: Full transaction data with addresses (optional)
         """
         try:
             conn = self.connect_db()
@@ -111,18 +134,57 @@ class WhaleMonitor:
                 cur.close()
                 return False
 
+            # Extract addresses if full tx data is provided
+            input_addresses = []
+            output_addresses = []
+            primary_input = None
+            primary_output = None
+
+            if tx_data:
+                # Extract input addresses
+                for inp in tx_data.get('vin', []):
+                    addr = inp.get('prevout', {}).get('scriptpubkey_address')
+                    if addr:
+                        input_addresses.append(addr)
+
+                # Extract output addresses and find the largest output
+                max_output_value = 0
+                for out in tx_data.get('vout', []):
+                    addr = out.get('scriptpubkey_address')
+                    value = out.get('value', 0)
+                    if addr:
+                        output_addresses.append(addr)
+                        # Track largest output (likely the main destination)
+                        if value > max_output_value:
+                            max_output_value = value
+                            primary_output = addr
+
+                # Primary input is usually the first one
+                primary_input = input_addresses[0] if input_addresses else None
+
             # Insert new whale transaction
             cur.execute("""
                 INSERT INTO whale_transactions
-                (txid, detected_at, value_btc, value_usd, btc_price_at_detection, status)
-                VALUES (%s, NOW(), %s, %s, %s, 'mempool')
+                (txid, detected_at, value_btc, value_usd, btc_price_at_detection, status,
+                 input_addresses, output_addresses, primary_input_address, primary_output_address)
+                VALUES (%s, NOW(), %s, %s, %s, 'mempool', %s, %s, %s, %s)
                 ON CONFLICT (txid, detected_at) DO NOTHING
-            """, (txid, btc_value, usd_value, self.btc_price))
+            """, (txid, btc_value, usd_value, self.btc_price,
+                  input_addresses or None, output_addresses or None,
+                  primary_input, primary_output))
 
             conn.commit()
             cur.close()
 
-            log.info(f"💎 Whale detected: {btc_value:,.2f} BTC (${usd_value:,.0f}) - TX: {txid[:16]}...")
+            # Log with address info if available
+            if primary_input and primary_output:
+                log.info(f"💎 Whale detected: {btc_value:,.2f} BTC (${usd_value:,.0f})")
+                log.info(f"   From: {primary_input[:20]}...")
+                log.info(f"   To:   {primary_output[:20]}...")
+                log.info(f"   TX: https://mempool.space/tx/{txid}")
+            else:
+                log.info(f"💎 Whale detected: {btc_value:,.2f} BTC (${usd_value:,.0f}) - TX: {txid[:16]}...")
+
             return True
 
         except Exception as e:
@@ -183,7 +245,9 @@ class WhaleMonitor:
 
                     # Check if it's a whale transaction
                     if value >= self.min_sats:
-                        if self.save_whale_transaction(txid, value, tx):
+                        # Fetch full transaction details to get addresses
+                        tx_details = await self.fetch_transaction_details(txid)
+                        if self.save_whale_transaction(txid, value, tx_details):
                             whale_count += 1
 
                 # Cleanup checked_txids if it gets too large

@@ -786,6 +786,36 @@ def main():
                         status_icon = "⏳"
                         status_color = "#F59E0B"
 
+                    # Get addresses
+                    primary_input = whale.get('primary_input_address', '')
+                    primary_output = whale.get('primary_output_address', '')
+
+                    # Decode address types
+                    def get_address_badge(addr):
+                        """Get badge for address type"""
+                        if not addr or pd.isna(addr):
+                            return ""
+                        if addr.startswith('1'):
+                            return '<span style="background: #6B7280; padding: 1px 4px; border-radius: 3px; font-size: 0.55rem; margin-left: 4px;">Legacy</span>'
+                        elif addr.startswith('3'):
+                            return '<span style="background: #8B5CF6; padding: 1px 4px; border-radius: 3px; font-size: 0.55rem; margin-left: 4px;">Multisig</span>'
+                        elif addr.startswith('bc1q'):
+                            return '<span style="background: #10B981; padding: 1px 4px; border-radius: 3px; font-size: 0.55rem; margin-left: 4px;">SegWit</span>'
+                        elif addr.startswith('bc1p'):
+                            return '<span style="background: #F59E0B; padding: 1px 4px; border-radius: 3px; font-size: 0.55rem; margin-left: 4px;">Taproot</span>'
+                        return ""
+
+                    from_badge = get_address_badge(primary_input)
+                    to_badge = get_address_badge(primary_output)
+
+                    # Format addresses for display
+                    from_addr = f"{primary_input[:10]}...{primary_input[-8:]}" if primary_input and pd.notna(primary_input) else "N/A"
+                    to_addr = f"{primary_output[:10]}...{primary_output[-8:]}" if primary_output and pd.notna(primary_output) else "N/A"
+
+                    # Create clickable address links
+                    from_addr_link = f"https://mempool.space/address/{primary_input}" if primary_input and pd.notna(primary_input) else "#"
+                    to_addr_link = f"https://mempool.space/address/{primary_output}" if primary_output and pd.notna(primary_output) else "#"
+
                     # Display whale card
                     st.markdown(f"""
                     <div style="background: linear-gradient(135deg, #2C2C2C 0%, #1E1E1E 100%);
@@ -807,6 +837,14 @@ def main():
                                 <div style="font-size: 0.75rem; color: {status_color};">
                                     {status_icon} {status.title()}
                                 </div>
+                            </div>
+                        </div>
+                        <div style="margin-top: 10px; font-size: 0.75rem; color: #FFF;">
+                            <div style="margin-bottom: 5px;">
+                                📤 From: <a href="{from_addr_link}" target="_blank" style="color: #FFF; text-decoration: none; font-weight: 500;">{from_addr}</a>{from_badge}
+                            </div>
+                            <div>
+                                📥 To: <a href="{to_addr_link}" target="_blank" style="color: #FFF; text-decoration: none; font-weight: 500;">{to_addr}</a>{to_badge}
                             </div>
                         </div>
                         <div style="margin-top: 8px;">
