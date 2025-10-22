@@ -140,7 +140,7 @@ def test_individual_functions():
         print(f"❌ Test failed: {e}")
     
     # Test 3: Load Price (requires DB connection)
-    print("\n--- Test 3: load_price_to_timescaledb ---")
+    print("\n--- Test 3: load_price ---")
     try:
         result = load_price(parquet_path=PARQUET_PATH)
         print(f"✅ Test passed: {result}")

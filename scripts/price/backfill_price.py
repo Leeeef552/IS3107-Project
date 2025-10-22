@@ -43,7 +43,7 @@ def check_missing_data(parquet_filename):
 
     last_timestamp = df["Timestamp"].max()
 
-    current_time = datetime.now(SGT) - timedelta(minutes=2)
+    current_time = datetime.now(SGT) - timedelta(minutes=1)
     current_timestamp = int(current_time.timestamp())
 
     last_datetime = datetime.fromtimestamp(last_timestamp, tz=SGT)
@@ -201,4 +201,7 @@ def backfill_price(currency_pair="btcusd", parquet_filename=PARQUET_PATH, **kwar
     log.info("=== Crypto Data Updater Finished ===")
     return parquet_filename
 
-backfill_price()
+
+if __name__ == "__main__":
+    result = backfill_price()
+    print(f"Backfill complete: {result}")

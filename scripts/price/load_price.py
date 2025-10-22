@@ -72,3 +72,8 @@ def load_price(**kwargs):
     bulk_insert_data(conn, df, "historical_price")
     conn.close()
     return f"Loaded {len(df):,} records"
+
+
+if __name__ == "__main__":
+    result = load_price()
+    print(result)

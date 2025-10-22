@@ -38,16 +38,21 @@ def find_parquet_file(download_path: str) -> str:
 def init_historical_price(**kwargs):
     """Download Bitcoin dataset (assumed to be in Parquet format)."""
     ensure_directory(DATA_DIR)
-    
+
     if os.path.exists(PARQUET_PATH):
         log.info("Parquet file already exists. Skipping download.")
         return PARQUET_PATH
 
     download_path = download_kaggle_dataset(DATASET_SLUG)
     downloaded_parquet = find_parquet_file(download_path)
-    
+
     # Copy to your standardized path
     shutil.copy(downloaded_parquet, PARQUET_PATH)
     log.info(f"✅ Parquet file saved to: {PARQUET_PATH}")
-    
+
     return PARQUET_PATH
+
+
+if __name__ == "__main__":
+    result = init_historical_price()
+    print(f"Historical data saved to: {result}")

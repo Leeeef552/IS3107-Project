@@ -1,26 +1,58 @@
 # Python virtual environments
 .venv/
+venv/
 *.venv
+ENV/
+env/
 
 # Byte-compiled / cache files
 __pycache__/
 *.py[cod]
 *$py.class
+*.so
 
 # Distribution / packaging
 build/
 dist/
 *.egg-info/
+.eggs/
 
 # Environment variables or secret files
 .env
 *.env
-!example.env
+!env.example
 
 # IDE / editor settings
 .vscode/
 .idea/
+*.swp
+*.swo
+*~
+.DS_Store
 
-# Datafile
+# Jupyter Notebook
+.ipynb_checkpoints
+*.ipynb
+!coindesk_news_test.ipynb
+!db.ipynb
+
+# Data files
 *.csv
 *.parquet
+historical_data/*.parquet
+!historical_data/.gitkeep
+
+# Logs
+*.log
+logs/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Streamlit
+.streamlit/secrets.toml
+
+# OS files
+Thumbs.db
