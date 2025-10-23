@@ -26,13 +26,3 @@ DB_CONFIG = {
     "password": os.getenv("TIMESCALE_PASSWORD"),
     "dbname": os.getenv("TIMESCALE_DBNAME", "postgres"),
 }
-
-# ----------------------------------------------------------------------
-# 🔴 Redis
-# ----------------------------------------------------------------------
-REDIS_CONFIG = {
-    "host": os.getenv("REDIS_HOST", "localhost"),
-    "port": int(os.getenv("REDIS_PORT", 6379)),
-    "stream_key": os.getenv("REDIS_STREAM_KEY", "price_stream"),
-    "maxlen": int(os.getenv("REDIS_STREAM_MAXLEN", 1000)),
-}
