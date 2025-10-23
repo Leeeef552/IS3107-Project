@@ -1,8 +1,8 @@
 # Core libraries
 requests
 python-dotenv
-websocket
 websockets
+websocket-client
 
 # Data handling
 pandas>=2.2.3
@@ -14,7 +14,7 @@ pytz  # Timezone support for SGT display
 
 # Database + SQL
 sqlalchemy
-psycopg2
+psycopg2-binary
 sqlparse
 redis
 
