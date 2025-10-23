@@ -1,5 +1,6 @@
 # Use the official Airflow image as a base
 FROM apache/airflow:2.9.0
+
 # Switch to airflow user for safe pip install
 USER airflow
 
