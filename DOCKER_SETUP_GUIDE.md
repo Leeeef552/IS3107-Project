@@ -59,4 +59,5 @@ docker compose up -d
 
 6. Access the webserver at localhost:8080
     - under DAGs should be able to search for all the DAGs within ./airflow/dags
-    - 
+    - user: airflow
+    - password: airflow
