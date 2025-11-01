@@ -198,7 +198,7 @@ def backfill_price(currency_pair="btcusd", parquet_filename=PARQUET_PATH, **kwar
     else:
         log.info("No tail updates required.")
 
-    log.info("=== Crypto Data Updater Finished ===")
+    log.info("=== ✅✅✅ Crypto Data Updater Finished ===")
     return parquet_filename
 
 

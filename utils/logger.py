@@ -11,9 +11,22 @@ def sgt_time(*args):
     """Convert log timestamps to Singapore Time (SGT)."""
     return datetime.now(SGT).timetuple()
 
+class EmojiFormatter(logging.Formatter):
+    EMOJIS = {
+        logging.DEBUG:    "🔧",    # Debug → wrench/tool
+        logging.INFO:     "🟢",    # Info → money/Bitcoin/success (as requested)
+        logging.WARNING:  "⚠️",    # Warning → alert
+        logging.ERROR:    "🚨",    # Error → cross
+        logging.CRITICAL: "🚨",    # Critical → siren
+    }
+
+    def format(self, record):
+        record.levelname = f"{self.EMOJIS.get(record.levelno, '')} {record.levelname}"
+        return super().format(record)
+
 def get_logger(name: str, level=logging.INFO):
     """
-    Create or return a logger instance with consistent settings.
+    Create or return a logger instance with consistent settings and emoji support.
     
     Args:
         name (str): Name of the logger (e.g., filename).
@@ -26,7 +39,7 @@ def get_logger(name: str, level=logging.INFO):
 
     if not logger.handlers:
         handler = logging.StreamHandler(sys.stdout)
-        formatter = logging.Formatter(
+        formatter = EmojiFormatter(
             fmt="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
             datefmt="%Y-%m-%d %H:%M:%S",
         )
