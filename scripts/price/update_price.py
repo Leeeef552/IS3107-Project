@@ -154,7 +154,7 @@ def fetch_and_insert_klines(symbol: str, start_ms: int, end_ms: int) -> int:
     # Sort by time
     unique_rows.sort(key=lambda x: x[0])
 
-    # Bulk insert with ON CONFLICT DO NOTHING
+    # Bulk insert with ON CONFLICT DO UPDATE (to ensure correctness)
     with get_db_connection() as conn:
         with conn.cursor() as cur:
             execute_values(
@@ -162,12 +162,18 @@ def fetch_and_insert_klines(symbol: str, start_ms: int, end_ms: int) -> int:
                 """
                 INSERT INTO historical_price (time, open, high, low, close, volume)
                 VALUES %s
-                ON CONFLICT (time) DO NOTHING
+                ON CONFLICT (time) DO UPDATE
+                SET open = EXCLUDED.open,
+                    high = EXCLUDED.high,
+                    low = EXCLUDED.low,
+                    close = EXCLUDED.close,
+                    volume = EXCLUDED.volume;
                 """,
                 unique_rows,
                 page_size=1000,
             )
             inserted = cur.rowcount
+
 
     log.info(f"Inserted {inserted} new rows for {symbol}.")
     return inserted

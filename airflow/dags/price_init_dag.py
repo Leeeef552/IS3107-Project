@@ -15,7 +15,7 @@ from configs.config import AGGREGATES_DIR
 default_args = {
     "owner": "airflow",
     "depends_on_past": False,
-    "retries": 0,
+    "retries": 1,
 }
 
 with DAG(
@@ -52,7 +52,7 @@ with DAG(
     )
 
     # ------------------------------------------------------------------
-    # Step 4: Create aggregates (parallel per script)
+    # Step 4: Create aggregates (run sequentially)
     # ------------------------------------------------------------------
     aggregate_tasks = []
     for script_name in os.listdir(AGGREGATES_DIR):
@@ -67,4 +67,11 @@ with DAG(
     # ------------------------------------------------------------------
     # Task dependencies
     # ------------------------------------------------------------------
-    init_task >> backfill_task >> load_task >> aggregate_tasks
+    init_task >> backfill_task >> load_task
+
+    # Chain aggregate tasks sequentially
+    if aggregate_tasks:
+        load_task >> aggregate_tasks[0]
+        for i in range(len(aggregate_tasks) - 1):
+            aggregate_tasks[i] >> aggregate_tasks[i + 1]
+

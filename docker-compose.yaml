@@ -1,15 +1,20 @@
 version: '3'
+
 networks:
   airflow-net:
     driver: bridge
+    # Shared Docker network so all services (Airflow, Redis, Postgres, TimescaleDB) can communicate.
 
 x-airflow-common:
   &airflow-common
   build:
-      context: .
-      dockerfile: Dockerfile
+    context: .
+    dockerfile: Dockerfile   # Airflow Docker image build context
+  env_file:
+    - .env                   # Load environment variables from project .env
   environment:
     &airflow-common-env
+    # Airflow configuration values (CeleryExecutor enables distributed task execution)
     AIRFLOW__CORE__EXECUTOR: CeleryExecutor
     AIRFLOW__CORE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
     AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://airflow:airflow@postgres/airflow
@@ -18,48 +23,21 @@ x-airflow-common:
     AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
     AIRFLOW__CORE__LOAD_EXAMPLES: 'true'
     AIRFLOW__API__AUTH_BACKEND: 'airflow.api.auth.backend.basic_auth'
-
-    # Make your non-Airflow folders importable by DAGs
     PYTHONPATH: "/opt:/opt/airflow:/opt/airflow/dags:/opt/airflow/plugins"
-
-    # Pre-provision an Airflow Connection for Timescale
     AIRFLOW_CONN_TIMESCALE: "postgresql://${TIMESCALE_USER}:${TIMESCALE_PASSWORD}@${TIMESCALE_HOST}:${TIMESCALE_PORT}/${TIMESCALE_DBNAME}"
-    # =====================================================================
-    # DATABASE CONFIGURATION
-    # =====================================================================
-    TIMESCALE_HOST: "${TIMESCALE_HOST}"
-    TIMESCALE_PORT: "${TIMESCALE_PORT}"
-    TIMESCALE_USER: "${TIMESCALE_USER}"
-    TIMESCALE_PASSWORD: "${TIMESCALE_PASSWORD}"
-    TIMESCALE_DBNAME: "${TIMESCALE_DBNAME}"
-
-    # =====================================================================
-    # NEWS API KEYS (for Sentiment Analysis)
-    # =====================================================================
-    NEWS_API_KEY: "${NEWS_API_KEY}"
-    CRYPTOCOMPARE_API_KEY: "${CRYPTOCOMPARE_API_KEY}"
-    REDDIT_CLIENT_ID: "${REDDIT_CLIENT_ID}"
-    REDDIT_CLIENT_SECRET: "${REDDIT_CLIENT_SECRET}"
-    REDDIT_USER_AGENT: "${REDDIT_USER_AGENT}"
-
-    # =====================================================================
-    # LOCAL DIRECTORY AND FILEPATHS FOR AIRFLOW
-    # =====================================================================
-    DATA_DIR: "${DATA_DIR}"
-    SCHEMA_DIR: "${SCHEMA_DIR}"
-    AGGREGATES_DIR: "${AGGREGATES_DIR}"
+    # Above Timescale connection string is auto-available inside Airflow (e.g., via Variable or Connection)
 
   volumes:
-    - ./airflow/dags:/opt/airflow/dags
-    - ./airflow/logs:/opt/airflow/logs
-    - ./airflow/plugins:/opt/airflow/plugins
-    - ./configs:/opt/configs
-    - ./schema:/opt/schema
-    - ./scripts:/opt/scripts
-    - ./utils:/opt/utils
-    - ./historical_data:/opt/historical_data
+    - ./airflow/dags:/opt/airflow/dags          # Folder where DAG definitions live
+    - ./airflow/logs:/opt/airflow/logs          # Airflow logs are stored here for persistence
+    - ./airflow/plugins:/opt/airflow/plugins    # Custom Airflow plugins
+    - ./configs:/opt/configs                    # Shared configuration files (API keys, settings)
+    - ./schema:/opt/schema                      # SQL schema files (for TimescaleDB setup)
+    - ./scripts:/opt/scripts                    # Project Python scripts used by DAGs
+    - ./utils:/opt/utils                        # Helper/utility scripts
+    - ./historical_data:/opt/historical_data    # Local folder for downloaded data (e.g., price history)
 
-  user: "${AIRFLOW_UID:-50000}:0"
+  user: "${AIRFLOW_UID:-50000}:0"               # Default user to avoid permission issues
   depends_on: &airflow-common-depends-on
     redis:
       condition: service_healthy
@@ -72,7 +50,7 @@ services:
   postgres:
     image: postgres:13
     ports:
-      - "5433:5432"
+      - "5433:5432"       # Expose Postgres for Airflow metadata DB (on host port 5433)
     environment:
       POSTGRES_USER: airflow
       POSTGRES_PASSWORD: airflow
@@ -90,7 +68,7 @@ services:
   redis:
     image: redis:latest
     ports:
-      - 6379:6379
+      - "6379:6379"       # Redis is the Celery message broker for Airflow workers
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -100,16 +78,17 @@ services:
     networks:
       - airflow-net
 
-  # Your TimescaleDB (on host 5432)
   timescaledb:
     image: timescale/timescaledb:latest-pg17
     container_name: timescaledb
+    env_file:
+      - .env
     environment:
       POSTGRES_USER: "${TIMESCALE_USER}"
       POSTGRES_PASSWORD: "${TIMESCALE_PASSWORD}"
       POSTGRES_DB: "${TIMESCALE_DBNAME}"
     ports:
-      - "5432:5432"
+      - "5432:5432"       # TimescaleDB for storing Bitcoin + sentiment data
     volumes:
       - timescale-data:/var/lib/postgresql/data
     healthcheck:
@@ -125,7 +104,7 @@ services:
     <<: *airflow-common
     command: webserver
     ports:
-      - 8080:8080
+      - "8080:8080"       # Airflow UI available at http://localhost:8080
     healthcheck:
       test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
       interval: 10s
@@ -135,29 +114,29 @@ services:
 
   airflow-scheduler:
     <<: *airflow-common
-    command: scheduler
+    command: scheduler     # Core Airflow component that schedules DAG runs
     restart: always
 
   airflow-worker:
     <<: *airflow-common
-    command: celery worker
+    command: celery worker # Executes tasks from the scheduler
     restart: always
 
   airflow-init:
     <<: *airflow-common
-    command: version
+    command: version       # Used for database initialization and creating admin user
     environment:
       <<: *airflow-common-env
-      _AIRFLOW_DB_UPGRADE: 'true'
-      _AIRFLOW_WWW_USER_CREATE: 'true'
+      _AIRFLOW_DB_UPGRADE: 'true'               # Run DB migrations automatically
+      _AIRFLOW_WWW_USER_CREATE: 'true'          # Create Airflow UI user automatically
       _AIRFLOW_WWW_USER_USERNAME: ${_AIRFLOW_WWW_USER_USERNAME:-airflow}
       _AIRFLOW_WWW_USER_PASSWORD: ${_AIRFLOW_WWW_USER_PASSWORD:-airflow}
 
   flower:
     <<: *airflow-common
-    command: celery flower
+    command: celery flower  # Celery monitoring UI
     ports:
-      - 5555:5555
+      - "5555:5555"        # Flower available at http://localhost:5555
     healthcheck:
       test: ["CMD", "curl", "--fail", "http://localhost:5555/"]
       interval: 10s
@@ -166,5 +145,5 @@ services:
     restart: always
 
 volumes:
-  postgres-db-volume:
-  timescale-data:
+  postgres-db-volume:       # Persistent volume for Airflow metadata DB
+  timescale-data:           # Persistent volume for TimescaleDB data
