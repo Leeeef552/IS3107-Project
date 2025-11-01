@@ -79,8 +79,8 @@ def find_missing_ranges_in_db():
     # Tail gap
     tail_start_ms_to_use = tail_start_ms if tail_start_ms < now_ts_ms else None
 
-    # Internal gaps in last 3 days
-    recent_start = now - timedelta(days=3)
+    # Internal gaps in last 1 days
+    recent_start = now - timedelta(days=1)
     with get_db_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
