@@ -16,8 +16,10 @@ CREATE TABLE whale_transactions (
     label TEXT CHECK (label IN ('Whale','Shark','Dolphin')),
     input_count INTEGER,
     output_count INTEGER,
-    PRIMARY KEY (txid, block_height, detected_at)  -- ✅ add detected_at here
+    output_addresses TEXT[],
+    PRIMARY KEY (txid, block_height, detected_at)
 );
+
 
 SELECT create_hypertable(
     'whale_transactions',

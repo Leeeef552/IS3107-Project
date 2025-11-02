@@ -40,6 +40,14 @@ async def extract_whales(block_hash):
         whales = []
         for tx in txs:
             total_btc = sats_to_btc(sum(o["value"] for o in tx["vout"]))
+            vouts = tx.get("vout", [])
+            total_btc = sats_to_btc(sum(o.get("value", 0) for o in vouts))
+            # Esplora-style JSON: standard outputs include 'scriptpubkey_address'
+            addresses = [
+                o.get("scriptpubkey_address")
+                for o in vouts
+                if o.get("scriptpubkey_address")
+            ]            
             label = label_for_value(total_btc)
             if label:
                 whales.append({
@@ -47,8 +55,10 @@ async def extract_whales(block_hash):
                     "block_hash": block_hash,
                     "block_height": block_height,
                     "value_btc": total_btc,
-                    "label": label
-                })
+                    "label": label,
+                    "output_count": len(vouts),
+                    "output_addresses": addresses,
+                 })
         return whales
 
 def extract_large_transactions(**context):
