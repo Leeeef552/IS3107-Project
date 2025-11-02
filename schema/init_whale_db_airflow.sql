@@ -11,6 +11,7 @@ CREATE TABLE whale_transactions (
     txid TEXT NOT NULL,
     block_hash TEXT NOT NULL,
     block_height INTEGER NOT NULL,
+    block_timestamp TIMESTAMPTZ NOT NULL,
     detected_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     value_btc DOUBLE PRECISION NOT NULL,
     label TEXT CHECK (label IN ('Whale','Shark','Dolphin')),
@@ -31,6 +32,7 @@ SELECT create_hypertable(
 CREATE INDEX IF NOT EXISTS idx_whale_block_hash ON whale_transactions(block_hash);
 CREATE INDEX IF NOT EXISTS idx_whale_label ON whale_transactions(label);
 CREATE INDEX IF NOT EXISTS idx_whale_detected_at_desc ON whale_transactions(detected_at DESC);
+CREATE INDEX IF NOT EXISTS idx_whale_block_ts_desc ON whale_transactions(block_timestamp DESC);
 
 
 -- ===================================================================
@@ -42,6 +44,7 @@ DROP TABLE IF EXISTS whale_sentiment CASCADE;
 CREATE TABLE IF NOT EXISTS whale_sentiment (
     block_height INTEGER PRIMARY KEY,
     block_hash TEXT,
+    block_timestamp TIMESTAMPTZ,
     whale_count INTEGER NOT NULL DEFAULT 0,
     shark_count INTEGER NOT NULL DEFAULT 0,
     dolphin_count INTEGER NOT NULL DEFAULT 0,
@@ -49,3 +52,5 @@ CREATE TABLE IF NOT EXISTS whale_sentiment (
     calculated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE INDEX IF NOT EXISTS idx_ws_sentiment_block_ts_desc ON whale_sentiment (sentiment, block_timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_ws_block_ts_desc ON whale_sentiment(block_timestamp DESC);

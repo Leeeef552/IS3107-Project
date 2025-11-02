@@ -1,6 +1,7 @@
 import asyncio
 import aiohttp
 from utils.logger import get_logger
+from datetime import datetime, timezone
 
 logger = get_logger("extract_large_transactions")
 
@@ -17,16 +18,16 @@ async def fetch_json(session, url):
         return await r.json()
 
 async def fetch_block_txs(session, block_hash):
-    # Get transaction count and paginate
     info = await fetch_json(session, f"{BASE_URL}/api/block/{block_hash}")
     tx_count = info["tx_count"]
     block_height = info["height"]
+    block_ts = info["timestamp"]
     starts = range(0, tx_count, PAGE_SIZE)
     tasks = [fetch_json(session, f"{BASE_URL}/api/block/{block_hash}/txs/{s}") for s in starts]
     results = []
     for task in asyncio.as_completed(tasks):
         results.extend(await task)
-    return block_height, results
+    return block_height, block_ts, results
 
 def label_for_value(btc_value):
     for label, thr in LABEL_THRESHOLDS:
@@ -36,29 +37,27 @@ def label_for_value(btc_value):
 
 async def extract_whales(block_hash):
     async with aiohttp.ClientSession() as session:
-        block_height, txs = await fetch_block_txs(session, block_hash)
+        block_height, block_ts, txs = await fetch_block_txs(session, block_hash)
+        block_timestamp_iso = datetime.fromtimestamp(block_ts, tz=timezone.utc).isoformat()
+
         whales = []
         for tx in txs:
-            total_btc = sats_to_btc(sum(o["value"] for o in tx["vout"]))
             vouts = tx.get("vout", [])
             total_btc = sats_to_btc(sum(o.get("value", 0) for o in vouts))
-            # Esplora-style JSON: standard outputs include 'scriptpubkey_address'
-            addresses = [
-                o.get("scriptpubkey_address")
-                for o in vouts
-                if o.get("scriptpubkey_address")
-            ]            
+            addresses = [o.get("scriptpubkey_address") for o in vouts if o.get("scriptpubkey_address")]
+
             label = label_for_value(total_btc)
             if label:
                 whales.append({
                     "txid": tx["txid"],
                     "block_hash": block_hash,
                     "block_height": block_height,
+                    "block_timestamp": block_timestamp_iso,
                     "value_btc": total_btc,
                     "label": label,
                     "output_count": len(vouts),
                     "output_addresses": addresses,
-                 })
+                })
         return whales
 
 def extract_large_transactions(**context):

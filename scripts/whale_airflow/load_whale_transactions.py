@@ -88,15 +88,15 @@ def load_whale_transactions_to_db(**context):
                 cur.execute(
                     """
                     INSERT INTO whale_transactions
-                    (txid, block_hash, block_height, detected_at, value_btc, label, output_count, output_addresses)
-                    VALUES (%s, %s, %s, %s::timestamptz, %s, %s, %s, %s)
-                     
+                    (txid, block_hash, block_height, block_timestamp, detected_at, value_btc, label, output_count, output_addresses)
+                    VALUES (%s, %s, %s, %s::timestamptz, %s::timestamptz, %s, %s, %s, %s)
                     ON CONFLICT ON CONSTRAINT whale_transactions_pkey DO NOTHING
                     """,
                     (
                         w["txid"],
                         w["block_hash"],
                         w["block_height"],
+                        w["block_timestamp"],  # NEW
                         detected_at,
                         float(w["value_btc"]),
                         w["label"],
