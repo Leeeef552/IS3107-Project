@@ -17,7 +17,7 @@ default_args = {
 }
 
 with DAG(
-    dag_id="whale_monitor_dag",
+    dag_id="batch_update_whale",
     description="Real-time monitoring DAG that fetches and processes the latest whale transactions every 10 minutes",
     default_args=default_args,
     schedule_interval="*/10 * * * *",
@@ -27,7 +27,7 @@ with DAG(
 ) as dag:
 
     fetch = PythonOperator(
-        task_id="fetch_latest_block",
+        task_id="fetch_recent_blocks",
         python_callable=fetch_recent_blocks,
         op_kwargs={"count": 1},
     )

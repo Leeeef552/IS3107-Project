@@ -20,7 +20,7 @@ default_args = {
 }
 
 with DAG(
-    dag_id="init_whale_dag",
+    dag_id="whale_init_dag",
     description="ETL pipeline for whale transaction detection and sentiment transformation",
     default_args=default_args,
     schedule_interval="@once",

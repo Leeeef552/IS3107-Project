@@ -22,7 +22,7 @@ default_args = {
 # DAG DEFINITION
 # ---------------------------------------------------------------------
 with DAG(
-    dag_id="update_database_dag",
+    dag_id="batch_update_price_and_news",
     description="Update Binance price data and news sentiment data",
     default_args=default_args,
     schedule_interval="0 * * * *",

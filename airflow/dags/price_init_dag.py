@@ -19,7 +19,7 @@ default_args = {
 }
 
 with DAG(
-    dag_id="price_pipeline_dag",
+    dag_id="price_init_dag",
     description="Full crypto price ETL and aggregation pipeline",
     default_args=default_args,
     start_date=datetime(2025, 10, 23),

@@ -19,7 +19,7 @@ default_args = {
 }
 
 with DAG(
-    'load_news_sentiment',
+    'news_init_dag',
     default_args=default_args,
     description='Load news sentiment data into TimescaleDB',
     schedule_interval='@hourly',
