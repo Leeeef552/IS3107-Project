@@ -37,7 +37,7 @@ with DAG(
     backfill_task = PythonOperator(
         task_id='backfill_historical_sentiment',
         python_callable=backfill_sentiment,
-        op_kwargs={'days': 7},  # You can adjust this or make it configurable
+        op_kwargs={'days': 30},  # You can adjust this or make it configurable
         provide_context=True,
     )
 

@@ -4,46 +4,54 @@ from utils.logger import get_logger
 
 logger = get_logger("extract_large_transactions.py")
 
+BASE_URL = "https://mempool.space/api"
+
+
+def _iso(ts: int) -> str:
+    return datetime.fromtimestamp(ts, tz=timezone.utc).isoformat()
+
+
+def _fetch_block_header(hash_or_height: str):
+    """Return header dict for a single block."""
+    url = f"{BASE_URL}/block/{hash_or_height}"
+    r = requests.get(url, timeout=10)
+    r.raise_for_status()
+    b = r.json()
+    return {
+        "height": b["height"],
+        "hash": b["id"],
+        "timestamp": _iso(b["timestamp"]),
+        "tx_count": b.get("tx_count"),
+        "previous_block_hash": b.get("previousblockhash"),
+    }
+
 
 def fetch_recent_blocks(count: int = 5, **context):
     """
-    Airflow task: Fetch recent Bitcoin block headers.
-    Pushes list of block dicts to XCom.
+    Fetch *count* recent Bitcoin block headers (count can be >10).
+    Works by walking backwards from the current tip.
     """
-    API = "https://mempool.space/api/blocks"
     logger.info(f"Starting fetch_recent_blocks(count={count})")
 
-    def iso(ts):
-        return datetime.fromtimestamp(ts, tz=timezone.utc).isoformat()
+    # 1. get current tip
+    tip_hash = requests.get(f"{BASE_URL}/blocks", timeout=10).json()[0]["id"]
 
-    try:
-        logger.debug(f"Requesting latest {count} blocks from {API}")
-        resp = requests.get(API, timeout=10)
-        resp.raise_for_status()
+    blocks = []
+    current_hash = tip_hash
 
-        blocks = resp.json()[:count]
-        logger.info(f"Fetched {len(blocks)} blocks successfully")
+    for _ in range(count):
+        try:
+            hdr = _fetch_block_header(current_hash)
+        except Exception as e:
+            logger.error(f"Failed to fetch header {current_hash}: {e}")
+            break
+        blocks.append(hdr)
+        current_hash = hdr.get("previous_block_hash")
+        if not current_hash:          # genesis
+            break
 
-        block_list = [
-            {
-                "height": b["height"],
-                "hash": b["id"],
-                "timestamp": iso(b["timestamp"]),
-                "tx_count": b.get("tx_count"),
-            }
-            for b in blocks
-        ]
+    logger.info(f"Fetched {len(blocks)} blocks successfully")
 
-        # Push to XCom for next task
-        context["task_instance"].xcom_push(key="blocks", value=block_list)
-        logger.debug(f"Pushed {len(block_list)} blocks to XCom")
-
-        logger.info("fetch_recent_blocks completed successfully")
-        return block_list
-
-    except requests.RequestException as e:
-        logger.error(f"Network error fetching blocks: {e}", exc_info=True)
-        raise
-    except Exception as e:
-        logger.error(f"Unexpected error in fetch_recent_blocks: {e}", exc_info=True)
-        raise
+    # Push to XCom for next task
+    context["task_instance"].xcom_push(key="blocks", value=blocks)
+    return blocks
