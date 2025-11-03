@@ -8,10 +8,10 @@ logger = get_logger("extract_large_transactions")
 
 BASE_URL = "https://mempool.space"
 PAGE_SIZE = 25
-MAX_CONCURRENCY = 16
+MAX_CONCURRENCY = 24
 RETRIES = 3
 BACKOFF = 1.5
-REQUEST_TIMEOUT = 25
+REQUEST_TIMEOUT = 15
 
 LABEL_THRESHOLDS_BTC = [("Whale", 1000), ("Shark", 500), ("Dolphin", 100)]
 SATS_PER_BTC = 100_000_000
