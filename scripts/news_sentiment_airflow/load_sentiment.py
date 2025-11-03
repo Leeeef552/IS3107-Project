@@ -239,8 +239,8 @@ def initialize_database(force: bool = False):
     
     # Execute schema scripts
     schema_files = [
-        "schema/sentiment/init_sentiment_db.sql",
-        "schema/sentiment/sentiment_aggregates.sql"
+        "/opt/schema/sentiment/init_sentiment_db.sql",
+        "/opt/schema/sentiment/sentiment_aggregates.sql"
     ]
     
     for schema_file in schema_files:
@@ -255,15 +255,6 @@ def initialize_database(force: bool = False):
 # =====================================================================
 # MAIN FUNCTION
 # =====================================================================
-def main():
-    """Initialize sentiment database"""
-    import argparse
-    
-    parser = argparse.ArgumentParser(description='Initialize sentiment database')
-    parser.add_argument('--force', action='store_true', help='Force recreation of tables')
-    args = parser.parse_args()
-    
-    initialize_database(force=args.force)
-
-if __name__ == "__main__":
-    main()
+def load_sentiment(**context):
+    """Airflow-compatible task entrypoint"""
+    initialize_database(force=False)

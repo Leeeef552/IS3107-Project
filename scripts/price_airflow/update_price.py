@@ -181,7 +181,7 @@ def fetch_and_insert_klines(symbol: str, start_ms: int, end_ms: int) -> int:
 # ----------------------------------------------------------------------
 # MAIN ENTRY POINT
 # ----------------------------------------------------------------------
-def update_historical_price(symbol: str = "BTCUSDT", **kwargs) -> int:
+def update_price(symbol: str = "BTCUSDT", **kwargs) -> int:
     """
     Airflow-compatible function to update Binance 1m price data in TimescaleDB.
     Returns number of rows inserted.
