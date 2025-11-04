@@ -22,7 +22,7 @@ with DAG(
     'news_init_dag',
     default_args=default_args,
     description='Load news sentiment data into TimescaleDB',
-    schedule_interval='@hourly',
+    schedule_interval='@once',
     start_date=datetime(2025, 10, 31),
     catchup=False,
     tags=['crypto', 'sentiment'],
