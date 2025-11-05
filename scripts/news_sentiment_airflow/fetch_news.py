@@ -195,7 +195,8 @@ class NewsAggregator:
             log.warning("ALPHA_VANTAGE_API_KEY not set, skipping Alpha Vantage")
             return []
 
-        MAX_CHUNK_DAYS = 30
+        MAX_CHUNK_DAYS = 14
+        OVERLAP_DAYS = 7  # Overlap between chunks in days
         now = datetime.now(timezone.utc)
         start_time = now - timedelta(hours=hours_back)
         all_articles = []
@@ -213,11 +214,12 @@ class NewsAggregator:
                 "time_from": time_from,
                 "time_to": time_to,
                 "limit": "1000",
-                "apikey": self.alpha_vantage_api_key
+                "apikey": self.alpha_vantage_api_key,
+                "sort": "RELEVANCE"  # Fixed typo
             }
 
             try:
-                log.info(f"Alpha Vantage: fetching {current_start.strftime('%Y-%m-%d')} → {current_end.strftime('%Y-%m-%d')}")
+                log.info(f"Alpha Vantage: fetching {current_start.strftime('%Y-%m-%d %H:%M')} → {current_end.strftime('%Y-%m-%d %H:%M')}")
                 response = requests.get(url, params=params, timeout=10)
                 response.raise_for_status()
                 data = response.json()
@@ -225,47 +227,60 @@ class NewsAggregator:
                 if "feed" not in data:
                     error_msg = data.get("Information") or data.get("Note") or data.get("Error Message") or "Unknown"
                     log.warning(f"Alpha Vantage chunk error: {error_msg}")
-                    current_start = current_end
-                    continue
+                else:
+                    feed = data["feed"]
+                    log.info(f"  → Retrieved {len(feed)} articles")
 
-                feed = data["feed"]
-                log.info(f"  → Retrieved {len(feed)} articles")
-
-                cutoff_time = now - timedelta(hours=hours_back)
-                for item in feed:
-                    tp = item.get("time_published", "")
-                    if len(tp) >= 14:
-                        try:
-                            pub_dt = datetime.strptime(tp[:14], "%Y%m%dT%H%M%S").replace(tzinfo=timezone.utc)
-                        except ValueError:
+                    cutoff_time = now - timedelta(hours=hours_back)
+                    for item in feed:
+                        tp = item.get("time_published", "")
+                        if len(tp) >= 14:
+                            try:
+                                pub_dt = datetime.strptime(tp[:14], "%Y%m%dT%H%M%S").replace(tzinfo=timezone.utc)
+                            except ValueError:
+                                pub_dt = now
+                        else:
                             pub_dt = now
-                    else:
-                        pub_dt = now
 
-                    if pub_dt < cutoff_time:
-                        continue
+                        if pub_dt < cutoff_time:
+                            continue
 
-                    authors = item.get("authors", [])
-                    author = authors[0] if authors else None
+                        authors = item.get("authors", [])
+                        author = authors[0] if authors else None
 
-                    all_articles.append({
-                        "published_at": pub_dt.isoformat().replace("+00:00", "Z"),
-                        "title": item.get("title", ""),
-                        "content": item.get("summary", ""),
-                        "url": item.get("url", "").strip(),
-                        "source": f"AlphaVantage:{item.get('source', 'Unknown')}",
-                        "author": author,
-                        "keywords": [t.get("topic") for t in item.get("topics", []) if t.get("topic")]
-                    })
+                        all_articles.append({
+                            "published_at": pub_dt.isoformat().replace("+00:00", "Z"),
+                            "title": item.get("title", ""),
+                            "content": item.get("summary", ""),
+                            "url": item.get("url", "").strip(),
+                            "source": f"AlphaVantage:{item.get('source', 'Unknown')}",
+                            "author": author,
+                            "keywords": [t.get("topic") for t in item.get("topics", []) if t.get("topic")]
+                        })
 
-                current_start = current_end
+                # Advance with overlap: next start is current_end minus overlap
+                if current_end >= now:
+                    break
+                current_start = current_end - timedelta(days=OVERLAP_DAYS)
 
             except Exception as e:
                 log.error(f"Alpha Vantage chunk failed: {e}")
-                current_start = current_end  # advance to avoid infinite loop
+                # Still advance to avoid infinite loop
+                if current_end >= now:
+                    break
+                current_start = current_end - timedelta(days=OVERLAP_DAYS)
 
-        log.info(f"Alpha Vantage: Fetched {len(all_articles)} Bitcoin articles (chunked)")
-        return all_articles
+        # Deduplicate within Alpha Vantage results (optional but safe)
+        seen_urls = set()
+        deduped = []
+        for art in all_articles:
+            url = art.get("url")
+            if url and url not in seen_urls:
+                seen_urls.add(url)
+                deduped.append(art)
+
+        log.info(f"Alpha Vantage: Fetched {len(deduped)} unique Bitcoin articles (chunked with {OVERLAP_DAYS}-day overlap)")
+        return deduped
 
     # =================================================================
     # Aggregate All Sources
