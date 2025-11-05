@@ -24,7 +24,7 @@ def get_db_engine():
     try:
         connection_string = (
             f"postgresql://{DB_CONFIG['user']}:{DB_CONFIG['password']}"
-            f"@{DB_CONFIG['host']}:{DB_CONFIG['port']}/{DB_CONFIG['dbname']}"
+            f"@localhost:{DB_CONFIG['port']}/{DB_CONFIG['dbname']}"
         )
         engine = create_engine(connection_string)
         return engine

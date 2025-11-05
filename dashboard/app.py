@@ -17,6 +17,7 @@ import time
 import sys
 import os
 import pytz
+import numpy as np
 
 # Add parent directory to path for imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -31,6 +32,7 @@ from dashboard.data_queries import (
     get_whale_stats,
     get_whale_trend
 )
+from dashboard.binance_ws import start_price_stream, get_realtime_price
 
 # Page configuration
 st.set_page_config(
@@ -166,14 +168,83 @@ st.markdown("""
         font-weight: 600;
         white-space: nowrap;
     }
+    .price-flash-green {
+        animation: flashGreenText 0.8s ease-in-out;
+    }
+    .price-flash-red {
+        animation: flashRedText 0.8s ease-in-out;
+    }
+    @keyframes flashGreenText {
+        0% { 
+            color: #FFFFFF;
+        }
+        30% { 
+            color: #10B981;
+        }
+        60% { 
+            color: #10B981;
+        }
+        100% { 
+            color: #FFFFFF;
+        }
+    }
+    @keyframes flashRedText {
+        0% { 
+            color: #FFFFFF;
+        }
+        30% { 
+            color: #EF4444;
+        }
+        60% { 
+            color: #EF4444;
+        }
+        100% { 
+            color: #FFFFFF;
+        }
+    }
+    .price-number {
+        font-size: 2.5rem;
+        font-weight: 600;
+        line-height: 1.2;
+        color: #FFFFFF;
+        transition: color 0.1s;
+    }
 </style>
 """, unsafe_allow_html=True)
 
 
-def create_price_chart(df):
-    """Create an interactive candlestick chart"""
+def calculate_ma(df, period):
+    """Calculate Moving Average"""
+    return df['close'].rolling(window=period).mean()
+
+
+def calculate_rsi(df, period=14):
+    """Calculate Relative Strength Index"""
+    delta = df['close'].diff()
+    gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
+    rs = gain / loss
+    rsi = 100 - (100 / (1 + rs))
+    return rsi
+
+
+def calculate_macd(df, fast=12, slow=26, signal=9):
+    """Calculate MACD (Moving Average Convergence Divergence)"""
+    ema_fast = df['close'].ewm(span=fast, adjust=False).mean()
+    ema_slow = df['close'].ewm(span=slow, adjust=False).mean()
+    macd_line = ema_fast - ema_slow
+    signal_line = macd_line.ewm(span=signal, adjust=False).mean()
+    histogram = macd_line - signal_line
+    return macd_line, signal_line, histogram
+
+
+def create_price_chart(df, indicators=None):
+    """Create an interactive candlestick chart with optional moving averages"""
     if df.empty:
         return None
+    
+    if indicators is None:
+        indicators = []
     
     fig = make_subplots(
         rows=2, cols=1,
@@ -198,6 +269,33 @@ def create_price_chart(df):
         row=1, col=1
     )
     
+    # Add Moving Averages to price chart
+    if 'MA50' in indicators:
+        ma50 = calculate_ma(df, 50)
+        fig.add_trace(
+            go.Scatter(
+                x=df['time'],
+                y=ma50,
+                name='MA50',
+                line=dict(color='#FF9500', width=2),
+                mode='lines'
+            ),
+            row=1, col=1
+        )
+    
+    if 'MA200' in indicators:
+        ma200 = calculate_ma(df, 200)
+        fig.add_trace(
+            go.Scatter(
+                x=df['time'],
+                y=ma200,
+                name='MA200',
+                line=dict(color='#8B5CF6', width=2),
+                mode='lines'
+            ),
+            row=1, col=1
+        )
+    
     # Volume bar chart
     colors = ['#10B981' if df.iloc[i]['close'] >= df.iloc[i]['open'] else '#EF4444' 
               for i in range(len(df))]
@@ -218,12 +316,104 @@ def create_price_chart(df):
         xaxis_rangeslider_visible=False,
         template='plotly_dark',
         hovermode='x unified',
-        margin=dict(l=50, r=50, t=50, b=50)
+        margin=dict(l=50, r=50, t=50, b=50),
+        legend=dict(x=1.02, y=1, xanchor='left', yanchor='top', bgcolor='rgba(0,0,0,0)')
     )
     
     fig.update_xaxes(title_text="Time", row=2, col=1)
     fig.update_yaxes(title_text="Price (USD)", row=1, col=1)
     fig.update_yaxes(title_text="Volume", row=2, col=1)
+    
+    return fig
+
+
+def create_rsi_chart(df):
+    """Create a separate RSI chart"""
+    if df.empty:
+        return None
+    
+    rsi = calculate_rsi(df, 14)
+    
+    fig = go.Figure()
+    
+    fig.add_trace(
+        go.Scatter(
+            x=df['time'],
+            y=rsi,
+            name='RSI',
+            line=dict(color='#F59E0B', width=2),
+            mode='lines'
+        )
+    )
+    
+    # Add RSI overbought/oversold lines
+    fig.add_hline(y=70, line_dash="dash", line_color="red", opacity=0.5, annotation_text="Overbought (70)")
+    fig.add_hline(y=30, line_dash="dash", line_color="green", opacity=0.5, annotation_text="Oversold (30)")
+    
+    fig.update_layout(
+        height=300,
+        title="RSI (Relative Strength Index)",
+        xaxis_title="Time",
+        yaxis_title="RSI",
+        yaxis_range=[0, 100],
+        template='plotly_dark',
+        hovermode='x unified',
+        margin=dict(l=50, r=50, t=50, b=50),
+        legend=dict(x=1.02, y=1, xanchor='left', yanchor='top', bgcolor='rgba(0,0,0,0)')
+    )
+    
+    return fig
+
+
+def create_macd_chart(df):
+    """Create a separate MACD chart"""
+    if df.empty:
+        return None
+    
+    macd_line, signal_line, histogram = calculate_macd(df)
+    
+    fig = go.Figure()
+    
+    fig.add_trace(
+        go.Scatter(
+            x=df['time'],
+            y=macd_line,
+            name='MACD',
+            line=dict(color='#10B981', width=2),
+            mode='lines'
+        )
+    )
+    
+    fig.add_trace(
+        go.Scatter(
+            x=df['time'],
+            y=signal_line,
+            name='Signal',
+            line=dict(color='#EF4444', width=2),
+            mode='lines'
+        )
+    )
+    
+    fig.add_trace(
+        go.Bar(
+            x=df['time'],
+            y=histogram,
+            name='Histogram',
+            marker_color=['#10B981' if h >= 0 else '#EF4444' for h in histogram],
+            opacity=0.6
+        )
+    )
+    
+    fig.update_layout(
+        height=300,
+        title="MACD (Moving Average Convergence Divergence)",
+        xaxis_title="Time",
+        yaxis_title="MACD",
+        template='plotly_dark',
+        hovermode='x unified',
+        margin=dict(l=50, r=50, t=50, b=50),
+        legend=dict(x=1.02, y=1, xanchor='left', yanchor='top', bgcolor='rgba(0,0,0,0)')
+    )
     
     return fig
 
@@ -403,6 +593,11 @@ def create_whale_chart(df):
 def main():
     """Main dashboard function"""
     
+    # Initialize WebSocket price streamer (runs in background thread)
+    if 'ws_initialized' not in st.session_state:
+        start_price_stream()
+        st.session_state.ws_initialized = True
+    
     # Header
     st.markdown('<h1 class="main-header">Bitcoin Analytics Dashboard</h1>', 
                 unsafe_allow_html=True)
@@ -462,6 +657,17 @@ def main():
         }
         st.caption(f"Using {candle_interval_map[price_interval]}")
         
+        # Technical Indicators
+        st.subheader("Technical Indicators")
+        selected_indicators = st.multiselect(
+            "Select Indicators",
+            options=["MA50", "MA200", "RSI", "MACD"],
+            default=[],
+            help="Choose technical indicators to display on the chart"
+        )
+        # Store in session state for access in main chart area
+        st.session_state.selected_indicators = selected_indicators
+        
         st.divider()
         
         # Sentiment options
@@ -500,26 +706,104 @@ def main():
         st.caption(f"Last updated: {current_time.strftime('%Y-%m-%d %H:%M:%S')} SGT")
     
     # Main content area
-    # Row 1: Latest price metrics
-    latest_price = get_latest_price()
+    # Row 1: Latest price metrics (Real-time from WebSocket)
     
-    if latest_price is not None:
+    # Try to get real-time price from WebSocket first
+    ws_price = get_realtime_price()
+    
+    # Fallback to database if WebSocket data not available
+    if ws_price is None:
+        latest_price = get_latest_price()
+        if latest_price is not None:
+            # Convert database price to WebSocket format
+            ws_price = {
+                'close': latest_price['close'],
+                'open': latest_price['open'],
+                'high': latest_price['high'],
+                'low': latest_price['low'],
+                'volume': latest_price['volume'],
+                'time': latest_price['time']
+            }
+    
+    if ws_price is not None:
         col1, col2, col3, col4, col5 = st.columns(5)
         
         # Convert prices to selected currency
-        current_price = latest_price['close'] * exchange_rate
-        high_price = latest_price['high'] * exchange_rate
-        low_price = latest_price['low'] * exchange_rate
-        open_price = latest_price['open'] * exchange_rate
-        volume_btc = latest_price['volume']
+        current_price = ws_price['close'] * exchange_rate
+        high_price = ws_price['high'] * exchange_rate
+        low_price = ws_price['low'] * exchange_rate
+        open_price = ws_price['open'] * exchange_rate
+        volume_btc = ws_price['volume']
         volume_currency = volume_btc * current_price
         
+        # Convert time to Singapore timezone
+        price_time = ws_price['time']
+        if price_time.tzinfo is None:
+            price_time = pytz.UTC.localize(price_time)
+        singapore_tz = pytz.timezone('Asia/Singapore')
+        price_time_sgt = price_time.astimezone(singapore_tz)
+        
+        # Track price changes for flash animation
+        if 'prev_price' not in st.session_state:
+            st.session_state.prev_price = current_price
+            st.session_state.price_change_count = 0
+        
+        # Detect price change direction
+        prev_price = st.session_state.prev_price
+        price_change = current_price - prev_price
+        
+        # Determine flash class based on price change
+        flash_class = ""
+        if abs(price_change) > 0.01:  # Only flash if change is significant (> 0.01)
+            if price_change > 0:
+                flash_class = "price-flash-green"
+                st.session_state.price_change_count += 1
+            elif price_change < 0:
+                flash_class = "price-flash-red"
+                st.session_state.price_change_count += 1
+        
+        # Update previous price
+        st.session_state.prev_price = current_price
+        
         with col1:
-            st.metric(
-                label=f"Current Price ({currency})",
-                value=f"{currency_symbol}{current_price:,.2f}",
-                delta=f"{current_price - open_price:,.2f}"
-            )
+            # Create custom price display with flash animation on the numbers
+            # Use change count to ensure animation retriggers on each change
+            change_key = st.session_state.get('price_change_count', 0)
+            price_id = f"price-number-{change_key}"
+            
+            # Match Streamlit metric styling - label at top, value in middle, delta at bottom
+            # Use same structure and classes as Streamlit metrics for consistency
+            price_html = f"""
+            <div style="margin-bottom: 0.5rem;">
+                <div style="font-size: 0.875rem; color: rgb(163, 168, 184); margin-bottom: 0.25rem;">
+                    Current Price ({currency})
+                </div>
+                <div class="price-number {flash_class}" id="{price_id}" style="font-size: 2.5rem; font-weight: 600; line-height: 1.2; color: #FFFFFF;">
+                    {currency_symbol}{current_price:,.2f}
+                </div>
+                <div style="font-size: 0.875rem; color: {'#10B981' if current_price >= open_price else '#EF4444'}; margin-top: 0.25rem;">
+                    {f"{'+' if current_price >= open_price else ''}{current_price - open_price:,.2f}"}
+                </div>
+            </div>
+            <script>
+                // Force animation restart on each price change
+                (function() {{
+                    var priceEl = document.getElementById('{price_id}');
+                    if (priceEl) {{
+                        var hasFlash = priceEl.classList.contains('price-flash-green') || 
+                                      priceEl.classList.contains('price-flash-red');
+                        if (hasFlash) {{
+                            // Remove and re-add class to retrigger animation
+                            priceEl.style.animation = 'none';
+                            setTimeout(function() {{
+                                priceEl.style.animation = '';
+                            }}, 10);
+                        }}
+                    }}
+                }})();
+            </script>
+            """
+            st.markdown(price_html, unsafe_allow_html=True)
         
         with col2:
             st.metric(
@@ -544,7 +828,7 @@ def main():
         with col5:
             st.metric(
                 label="Last Updated (SGT)",
-                value=latest_price['time'].strftime('%m/%d %H:%M')
+                value=price_time_sgt.strftime('%m/%d %H:%M:%S')
             )
     
     st.divider()
@@ -554,9 +838,23 @@ def main():
     price_history = get_price_history(price_interval, price_limit)
     
     if not price_history.empty:
-        price_chart = create_price_chart(price_history)
+        # Get selected indicators from session state (set in sidebar)
+        selected_indicators = st.session_state.get('selected_indicators', [])
+        price_chart = create_price_chart(price_history, indicators=selected_indicators)
         if price_chart:
             st.plotly_chart(price_chart, use_container_width=True)
+        
+        # Display RSI as separate chart if selected
+        if 'RSI' in selected_indicators:
+            rsi_chart = create_rsi_chart(price_history)
+            if rsi_chart:
+                st.plotly_chart(rsi_chart, use_container_width=True)
+        
+        # Display MACD as separate chart if selected
+        if 'MACD' in selected_indicators:
+            macd_chart = create_macd_chart(price_history)
+            if macd_chart:
+                st.plotly_chart(macd_chart, use_container_width=True)
     else:
         st.info("Loading price data... Make sure the database is populated.")
     
@@ -889,12 +1187,12 @@ def main():
 
     # Footer
     st.divider()
-    st.caption("Data sources: Bitstamp (prices), NewsAPI/CryptoCompare/Reddit (news), Alternative.me (Fear & Greed), Mempool.space (whale txs)")
+    st.caption("Data sources: Binance WebSocket (real-time prices), NewsAPI/CryptoCompare/Reddit (news), Alternative.me (Fear & Greed), Mempool.space (whale txs)")
     st.caption("This dashboard is for educational purposes only. Not financial advice.")
     
-    # Auto-refresh every 60 seconds (aligned with continuous_updater.py price updates)
-    # Works with or without updater running - shows static data if updater is stopped
-    time.sleep(60)
+    # Auto-refresh every 1 second for real-time price updates
+    # WebSocket runs in background thread and updates session state
+    time.sleep(1)
     st.rerun()
 
 
