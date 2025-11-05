@@ -103,6 +103,36 @@ st.markdown("""
     .news-grid::-webkit-scrollbar-thumb:hover {
         background: #FFA500;
     }
+    /* Fix for metric containers to show full content */
+    [data-testid="stMetricContainer"] {
+        overflow: visible !important;
+    }
+    
+    /* Ensure metric values aren't clipped */
+    [data-testid="stMetricValue"] {
+        overflow: visible !important;
+        line-height: 1.2 !important;
+        padding: 0.25rem 0 !important;
+    }
+    
+    /* Fix for Streamlit column containers */
+    [data-testid="stHorizontalBlock"] {
+        overflow: visible !important;
+    }
+    
+    /* Ensure all metric-related elements have proper spacing */
+    [data-testid="stMetricLabel"],
+    [data-testid="stMetricDelta"] {
+        overflow: visible !important;
+        padding: 0.1rem 0 !important;
+    }
+    
+    /* Fix for custom price display */
+    .price-number {
+        overflow: visible !important;
+        line-height: 1.2 !important;
+        padding: 0.25rem 0 !important;
+    }
     .news-card {
         background: linear-gradient(135deg, #2C2C2C 0%, #1E1E1E 100%);
         border-radius: 10px;
@@ -676,7 +706,7 @@ def main():
         sentiment_period = st.selectbox(
             "Analysis Period",
             ["Last 24 hours", "Last 7 days", "Last 30 days"],
-            index=2,
+            index=0,
             help="Select time period for sentiment analysis"
         )
         
@@ -726,8 +756,6 @@ def main():
             }
     
     if ws_price is not None:
-        col1, col2, col3, col4, col5 = st.columns(5)
-        
         # Convert prices to selected currency
         current_price = ws_price['close'] * exchange_rate
         high_price = ws_price['high'] * exchange_rate
@@ -752,24 +780,35 @@ def main():
         prev_price = st.session_state.prev_price
         price_change = current_price - prev_price
         
-        # Determine flash class based on price change
+        # Determine flash class based on price change - trigger on ANY change
         flash_class = ""
-        if abs(price_change) > 0.01:  # Only flash if change is significant (> 0.01)
+        # Check if price actually changed (even by tiny amounts)
+        if abs(price_change) > 0.0001:  # Very small threshold to catch all meaningful changes
             if price_change > 0:
                 flash_class = "price-flash-green"
-                st.session_state.price_change_count += 1
             elif price_change < 0:
                 flash_class = "price-flash-red"
-                st.session_state.price_change_count += 1
+            # Always increment change count when price changes to force re-render
+            st.session_state.price_change_count += 1
         
         # Update previous price
         st.session_state.prev_price = current_price
+        
+        # Display metrics with even spacing
+        col1, col2, col3, col4, col5 = st.columns(5)
         
         with col1:
             # Create custom price display with flash animation on the numbers
             # Use change count to ensure animation retriggers on each change
             change_key = st.session_state.get('price_change_count', 0)
             price_id = f"price-number-{change_key}"
+            
+            # Calculate percentage change
+            if open_price > 0:
+                percent_change = ((current_price - open_price) / open_price) * 100
+                percent_change_str = f"{'+' if percent_change >= 0 else ''}{percent_change:.2f}%"
+            else:
+                percent_change_str = "0.00%"
             
             # Match Streamlit metric styling - label at top, value in middle, delta at bottom
             # Use same structure and classes as Streamlit metrics for consistency
@@ -782,24 +821,34 @@ def main():
                     {currency_symbol}{current_price:,.2f}
                 </div>
                 <div style="font-size: 0.875rem; color: {'#10B981' if current_price >= open_price else '#EF4444'}; margin-top: 0.25rem;">
-                    {f"{'+' if current_price >= open_price else ''}{current_price - open_price:,.2f}"}
+                    {percent_change_str}
                 </div>
             </div>
             <script>
-                // Force animation restart on each price change
+                // Force animation restart on each price change - use requestAnimationFrame for reliable timing
                 (function() {{
-                    var priceEl = document.getElementById('{price_id}');
-                    if (priceEl) {{
-                        var hasFlash = priceEl.classList.contains('price-flash-green') || 
-                                      priceEl.classList.contains('price-flash-red');
-                        if (hasFlash) {{
-                            // Remove and re-add class to retrigger animation
-                            priceEl.style.animation = 'none';
-                            setTimeout(function() {{
-                                priceEl.style.animation = '';
-                            }}, 10);
+                    function triggerAnimation() {{
+                        var priceEl = document.getElementById('{price_id}');
+                        if (priceEl) {{
+                            var hasFlash = priceEl.classList.contains('price-flash-green') || 
+                                          priceEl.classList.contains('price-flash-red');
+                            if (hasFlash) {{
+                                // Force animation restart by removing and re-adding the class
+                                var flashClass = priceEl.classList.contains('price-flash-green') ? 'price-flash-green' : 'price-flash-red';
+                                priceEl.classList.remove('price-flash-green', 'price-flash-red');
+                                // Force reflow to ensure class removal is processed
+                                void priceEl.offsetWidth;
+                                // Re-add the class to trigger animation
+                                priceEl.classList.add(flashClass);
+                            }}
                         }}
                     }}
+                    // Try immediately
+                    triggerAnimation();
+                    // Also try after a short delay to catch any timing issues
+                    requestAnimationFrame(function() {{
+                        requestAnimationFrame(triggerAnimation);
+                    }});
                 }})();
             </script>
             """
@@ -820,9 +869,7 @@ def main():
         with col4:
             st.metric(
                 label=f"Volume ({currency})",
-                value=f"{currency_symbol}{volume_currency:,.0f}",
-                delta=f"{volume_btc:.2f} BTC",
-                delta_color="off"
+                value=f"{currency_symbol}{volume_currency:,.0f}"
             )
         
         with col5:
@@ -1007,7 +1054,7 @@ def main():
     st.divider()
 
     # Section 4: Whale Transaction Alerts
-    st.subheader("🐋 Whale Transaction Alerts")
+    st.subheader("Whale Transaction Alerts")
 
     # Get whale statistics
     whale_stats = get_whale_stats(period_hours=24)
@@ -1042,119 +1089,131 @@ def main():
                 value=f"{whale_stats['avg_btc']:,.2f} BTC"
             )
 
-        # Two column layout for chart and transactions
-        col_chart, col_txs = st.columns([2, 1])
+        # Single column layout - focus on transactions
+        st.markdown("### Recent Whale Transactions")
+        
+        # Get recent whales
+        whales = get_recent_whale_transactions(limit=10)
 
-        with col_chart:
-            # Whale trend chart
-            whale_trend = get_whale_trend(interval='1 hour', limit=24)
-            if not whale_trend.empty:
-                whale_chart = create_whale_chart(whale_trend)
-                if whale_chart:
-                    st.plotly_chart(whale_chart, use_container_width=True)
-            else:
-                st.info("Building whale trend data... Check back soon.")
+        if not whales.empty:
+            for _, whale in whales.iterrows():
+                # Format time
+                if pd.notna(whale.get('detected_at')):
+                    detected_time = whale['detected_at']
+                    time_str = detected_time.strftime('%Y-%m-%d %H:%M')
+                else:
+                    time_str = "N/A"
 
-        with col_txs:
-            st.markdown("**Recent Whale Transactions**")
+                # Get transaction link
+                txid = whale['txid']
+                tx_short = f"{txid[:8]}...{txid[-6:]}"
+                explorer_url = f"https://mempool.space/tx/{txid}"
 
-            # Get recent whales
-            whales = get_recent_whale_transactions(limit=8)
+                # Status indicator
+                status = whale.get('status', 'mempool')
+                if status == 'confirmed':
+                    status_icon = "✅"
+                    status_color = "#10B981"
+                else:
+                    status_icon = "⏳"
+                    status_color = "#F59E0B"
 
-            if not whales.empty:
-                for _, whale in whales.iterrows():
-                    # Format time
-                    if pd.notna(whale.get('detected_at')):
-                        detected_time = whale['detected_at']
-                        time_str = detected_time.strftime('%H:%M')
-                    else:
-                        time_str = "N/A"
+                # Get addresses (handle missing columns gracefully)
+                primary_input = whale.get('primary_input_address') or ''
+                primary_output = whale.get('primary_output_address') or ''
+                
+                # If primary_output is not available, try to extract from output_addresses array
+                if not primary_output and 'output_addresses' in whale and pd.notna(whale.get('output_addresses')):
+                    output_addrs = whale['output_addresses']
+                    if isinstance(output_addrs, list) and len(output_addrs) > 0:
+                        primary_output = output_addrs[0]
 
-                    # Get transaction link
-                    txid = whale['txid']
-                    tx_short = f"{txid[:8]}...{txid[-6:]}"
-                    explorer_url = f"https://mempool.space/tx/{txid}"
-
-                    # Status indicator
-                    status = whale.get('status', 'mempool')
-                    if status == 'confirmed':
-                        status_icon = "✅"
-                        status_color = "#10B981"
-                    else:
-                        status_icon = "⏳"
-                        status_color = "#F59E0B"
-
-                    # Get addresses
-                    primary_input = whale.get('primary_input_address', '')
-                    primary_output = whale.get('primary_output_address', '')
-
-                    # Decode address types
-                    def get_address_badge(addr):
-                        """Get badge for address type"""
-                        if not addr or pd.isna(addr):
-                            return ""
-                        if addr.startswith('1'):
-                            return '<span style="background: #6B7280; padding: 1px 4px; border-radius: 3px; font-size: 0.55rem; margin-left: 4px;">Legacy</span>'
-                        elif addr.startswith('3'):
-                            return '<span style="background: #8B5CF6; padding: 1px 4px; border-radius: 3px; font-size: 0.55rem; margin-left: 4px;">Multisig</span>'
-                        elif addr.startswith('bc1q'):
-                            return '<span style="background: #10B981; padding: 1px 4px; border-radius: 3px; font-size: 0.55rem; margin-left: 4px;">SegWit</span>'
-                        elif addr.startswith('bc1p'):
-                            return '<span style="background: #F59E0B; padding: 1px 4px; border-radius: 3px; font-size: 0.55rem; margin-left: 4px;">Taproot</span>'
+                # Decode address types
+                def get_address_badge(addr):
+                    """Get badge for address type"""
+                    if not addr or pd.isna(addr):
                         return ""
+                    if addr.startswith('1'):
+                        return '<span style="background: #6B7280; padding: 2px 6px; border-radius: 4px; font-size: 0.65rem; margin-left: 6px;">Legacy</span>'
+                    elif addr.startswith('3'):
+                        return '<span style="background: #8B5CF6; padding: 2px 6px; border-radius: 4px; font-size: 0.65rem; margin-left: 6px;">Multisig</span>'
+                    elif addr.startswith('bc1q'):
+                        return '<span style="background: #10B981; padding: 2px 6px; border-radius: 4px; font-size: 0.65rem; margin-left: 6px;">SegWit</span>'
+                    elif addr.startswith('bc1p'):
+                        return '<span style="background: #F59E0B; padding: 2px 6px; border-radius: 4px; font-size: 0.65rem; margin-left: 6px;">Taproot</span>'
+                    return ""
 
-                    from_badge = get_address_badge(primary_input)
-                    to_badge = get_address_badge(primary_output)
+                from_badge = get_address_badge(primary_input)
+                to_badge = get_address_badge(primary_output)
 
-                    # Format addresses for display
-                    from_addr = f"{primary_input[:10]}...{primary_input[-8:]}" if primary_input and pd.notna(primary_input) else "N/A"
-                    to_addr = f"{primary_output[:10]}...{primary_output[-8:]}" if primary_output and pd.notna(primary_output) else "N/A"
+                # Format addresses for display (truncate if too long)
+                def format_address(addr, max_len=22):
+                    if not addr or pd.isna(addr):
+                        return "N/A"
+                    if len(addr) > max_len:
+                        return f"{addr[:12]}...{addr[-10:]}"
+                    return addr
+                
+                from_addr = format_address(primary_input)
+                to_addr = format_address(primary_output)
 
-                    # Create clickable address links
-                    from_addr_link = f"https://mempool.space/address/{primary_input}" if primary_input and pd.notna(primary_input) else "#"
-                    to_addr_link = f"https://mempool.space/address/{primary_output}" if primary_output and pd.notna(primary_output) else "#"
+                # Create clickable address links
+                from_addr_link = f"https://mempool.space/address/{primary_input}" if primary_input and pd.notna(primary_input) else "#"
+                to_addr_link = f"https://mempool.space/address/{primary_output}" if primary_output and pd.notna(primary_output) else "#"
 
-                    # Display whale card
-                    st.markdown(f"""
-                    <div style="background: linear-gradient(135deg, #2C2C2C 0%, #1E1E1E 100%);
-                                border-radius: 8px; padding: 12px; margin-bottom: 10px;
-                                border-left: 3px solid #FF9500;">
-                        <div style="display: flex; justify-content: space-between; align-items: center;">
-                            <div>
-                                <div style="font-size: 0.85rem; font-weight: bold; color: #FF9500;">
-                                    {whale['value_btc']:.2f} BTC
-                                </div>
-                                <div style="font-size: 0.7rem; color: #888;">
-                                    ${whale['value_usd']:,.0f}
-                                </div>
+                # Get label if available - color code by severity
+                label = whale.get('label', '')
+                label_colors = {
+                    'Whale': {'bg': '#FF9500', 'text': '#FFFFFF'},      # Orange background, white text - most dominant
+                    'Shark': {'bg': '#8B5CF6', 'text': '#FFFFFF'},      # Purple background, white text - medium
+                    'Dolphin': {'bg': '#3B82F6', 'text': '#FFFFFF'}     # Blue background, white text - least intrusive
+                }
+                label_style = label_colors.get(label, {'bg': '#6B7280', 'text': '#FFFFFF'})
+                label_badge = f'<span style="background: {label_style["bg"]}; color: {label_style["text"]}; padding: 3px 8px; border-radius: 4px; font-size: 0.7rem; margin-left: 8px; font-weight: 600; display: inline-block;">{label}</span>' if label else ''
+
+                # Display whale card with compact styling
+                st.markdown(f"""
+                <div style="background: linear-gradient(135deg, #1E1E1E 0%, #2C2C2C 100%);
+                            border-radius: 8px; padding: 10px 12px; margin-bottom: 8px;
+                            border-left: 3px solid #FF9500; box-shadow: 0 1px 4px rgba(0,0,0,0.2);">
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                        <div style="flex: 1;">
+                            <div style="font-size: 1rem; font-weight: bold; color: #FF9500; margin-bottom: 2px; display: flex; align-items: center;">
+                                {whale['value_btc']:,.2f} BTC {label_badge}
                             </div>
-                            <div style="text-align: right;">
-                                <div style="font-size: 0.7rem; color: #888;">
-                                    {time_str}
+                            <div style="font-size: 0.8rem; color: #888; margin-bottom: 6px;">
+                                ${whale.get('value_usd', whale.get('value_btc', 0) * 110000):,.0f}
+                            </div>
+                            <div style="font-size: 0.8rem; color: #FFF; line-height: 1.4;">
+                                <div style="margin-bottom: 3px;">
+                                    <span style="color: #888;">📤 From:</span> 
+                                    <a href="{from_addr_link}" target="_blank" style="color: #FFF; text-decoration: none; font-weight: 500; margin-left: 4px;">{from_addr}</a>{from_badge}
                                 </div>
-                                <div style="font-size: 0.75rem; color: {status_color};">
-                                    {status_icon} {status.title()}
+                                <div style="margin-bottom: 3px;">
+                                    <span style="color: #888;">📥 To:</span> 
+                                    <a href="{to_addr_link}" target="_blank" style="color: #FFF; text-decoration: none; font-weight: 500; margin-left: 4px;">{to_addr}</a>{to_badge}
+                                </div>
+                                <div style="margin-top: 4px;">
+                                    <a href="{explorer_url}" target="_blank"
+                                       style="color: #10B981; text-decoration: none; font-size: 0.75rem;">
+                                        🔗 {tx_short}
+                                    </a>
                                 </div>
                             </div>
                         </div>
-                        <div style="margin-top: 10px; font-size: 0.75rem; color: #FFF;">
-                            <div style="margin-bottom: 5px;">
-                                📤 From: <a href="{from_addr_link}" target="_blank" style="color: #FFF; text-decoration: none; font-weight: 500;">{from_addr}</a>{from_badge}
+                        <div style="text-align: right; margin-left: 12px; min-width: 120px;">
+                            <div style="font-size: 0.7rem; color: #888; margin-bottom: 4px;">
+                                {time_str}
                             </div>
-                            <div>
-                                📥 To: <a href="{to_addr_link}" target="_blank" style="color: #FFF; text-decoration: none; font-weight: 500;">{to_addr}</a>{to_badge}
+                            <div style="font-size: 0.75rem; color: {status_color}; font-weight: 500;">
+                                {status_icon} {status.title()}
                             </div>
-                        </div>
-                        <div style="margin-top: 8px;">
-                            <a href="{explorer_url}" target="_blank"
-                               style="color: #10B981; text-decoration: none; font-size: 0.7rem;">
-                                🔗 {tx_short}
-                            </a>
                         </div>
                     </div>
-                    """, unsafe_allow_html=True)
-            else:
-                st.info("No recent whale transactions")
+                </div>
+                """, unsafe_allow_html=True)
+        else:
+            st.info("No recent whale transactions found.")
 
     else:
         st.info("🔍 No whale transactions detected in the last 24 hours. The whale monitor may be starting up or the threshold may be too high. Try running: `python scripts/test_whale_monitor.py`")
