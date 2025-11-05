@@ -129,40 +129,35 @@ def scheduled_update():
 # =====================================================================
 def backfill_sentiment(days: int = 7):
     """
-    Backfill sentiment data for historical analysis
-    
-    Args:
-        days: Number of days to backfill
-        
-    Note: 
-        - NewsAPI free tier only allows 1 month of historical data
-        - Use with caution due to API rate limits
+    Backfill sentiment data for historical analysis in larger chunks to reduce API calls.
     """
     log.info(f" Backfilling sentiment data for last {days} days...")
-    
+
     hours = days * 24
-    
-    # Process in chunks to avoid overwhelming APIs
-    chunk_size = 24  # 24 hours per chunk
-    
+    chunk_size = 90 * 24  # 90 days per chunk = 2160 hours
+
+    total_chunks = (hours + chunk_size - 1) // chunk_size
+
     for i in range(0, hours, chunk_size):
         chunk_hours = min(chunk_size, hours - i)
-        log.info(f"\n Processing chunk: {i//24 + 1}/{(hours + chunk_size - 1)//chunk_size}")
-        
+        log.info(f"\n Processing chunk {i // chunk_size + 1}/{total_chunks} "
+                 f"({chunk_hours} hours)...")
+
         try:
             update_sentiment_pipeline(hours_back=chunk_hours, skip_refresh=True)
         except Exception as e:
-            log.error(f" Chunk failed: {e}")
+            log.error(f" Chunk {i // chunk_size + 1} failed: {e}")
             continue
-    
+
     # Refresh aggregates once at the end
     log.info("\n Final aggregate refresh...")
     db_config = get_db_config()
     conn = connect_to_db(db_config)
     refresh_continuous_aggregates(conn)
     conn.close()
-    
+
     log.info(" Backfill completed")
+
 
 # =====================================================================
 # INTEGRATION WITH PRICE UPDATE
@@ -176,4 +171,3 @@ def sync_with_price_update():
     
     # Update sentiment for the last 1 hour (matching price update interval)
     update_sentiment_pipeline(hours_back=1, skip_refresh=False)
-

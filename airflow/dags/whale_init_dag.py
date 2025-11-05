@@ -32,7 +32,7 @@ with DAG(
     fetch = PythonOperator(
         task_id="fetch_recent_blocks",
         python_callable=fetch_recent_blocks,
-        op_kwargs={"count": 300},
+        op_kwargs={"count": 10},
         provide_context=True,
     )
 
