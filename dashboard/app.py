@@ -783,13 +783,12 @@ def main():
         # Determine flash class based on price change - trigger on ANY change
         flash_class = ""
         # Check if price actually changed (even by tiny amounts)
-        if abs(price_change) > 0.0001:  # Very small threshold to catch all meaningful changes
-            if price_change > 0:
-                flash_class = "price-flash-green"
-            elif price_change < 0:
-                flash_class = "price-flash-red"
-            # Always increment change count when price changes to force re-render
-            st.session_state.price_change_count += 1
+        if price_change > 0:
+            flash_class = "price-flash-green"
+        elif price_change < 0:
+            flash_class = "price-flash-red"
+        # Always increment change count when price changes to force re-render
+        st.session_state.price_change_count += 1
         
         # Update previous price
         st.session_state.prev_price = current_price
@@ -1251,7 +1250,7 @@ def main():
     
     # Auto-refresh every 1 second for real-time price updates
     # WebSocket runs in background thread and updates session state
-    time.sleep(1)
+    time.sleep(2)
     st.rerun()
 
 
