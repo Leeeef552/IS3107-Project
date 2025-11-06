@@ -134,7 +134,7 @@ def backfill_sentiment(days: int = 7):
     log.info(f" Backfilling sentiment data for last {days} days...")
 
     hours = days * 24
-    chunk_size = 90 * 24  # 90 days per chunk = 2160 hours
+    chunk_size = days * 24  # 180 days per chunk = 4320 hours
 
     total_chunks = (hours + chunk_size - 1) // chunk_size
 
