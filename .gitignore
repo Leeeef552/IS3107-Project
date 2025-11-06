@@ -41,6 +41,10 @@ dist/
 *.parquet
 historical_data/*.parquet
 !historical_data/.gitkeep
+!fear_greed.csv
+!news_data.csv
+!price_data.csv
+!ml.ipynb
 
 # Logs
 *.log
