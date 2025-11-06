@@ -17,6 +17,8 @@ sqlalchemy
 psycopg2-binary
 sqlparse
 redis
+scipy
+
 
 # Initial data
 kagglehub
