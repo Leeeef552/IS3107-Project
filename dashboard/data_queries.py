@@ -337,20 +337,50 @@ def get_recent_whale_transactions(limit=10):
             txid,
             detected_at,
             value_btc,
-            value_usd,
-            btc_price_at_detection,
-            status,
-            confirmation_time,
-            primary_input_address,
-            primary_output_address,
-            input_addresses,
+            block_timestamp,
+            block_height,
+            label,
+            input_count,
+            output_count,
             output_addresses,
-            EXTRACT(EPOCH FROM (confirmation_time - detected_at))/60 AS confirmation_minutes
+            to_exchange,
+            from_exchange,
+            external_out_btc
         FROM whale_transactions
         ORDER BY detected_at DESC
         LIMIT {limit}
         """
         df = pd.read_sql_query(query, engine)
+        
+        # Calculate USD value from current BTC price
+        if not df.empty and 'value_btc' in df.columns:
+            # Get current BTC price
+            latest_price = get_latest_price()
+            if latest_price is not None and 'close' in latest_price:
+                btc_price = latest_price['close']
+                df['value_usd'] = df['value_btc'] * btc_price
+            else:
+                # Fallback to approximate price if can't fetch
+                df['value_usd'] = df['value_btc'] * 110000  # Approximate BTC price
+            
+            # Add status column (derived from block_timestamp)
+            # If block_timestamp exists, transaction is confirmed
+            df['status'] = df.apply(
+                lambda row: 'confirmed' if pd.notna(row.get('block_timestamp')) else 'mempool',
+                axis=1
+            )
+            
+            # Extract primary addresses from output_addresses array
+            # Take first output address as primary
+            if 'output_addresses' in df.columns:
+                df['primary_output_address'] = df['output_addresses'].apply(
+                    lambda x: x[0] if isinstance(x, list) and len(x) > 0 else None
+                )
+            else:
+                df['primary_output_address'] = None
+            
+            # Primary input address not available in Airflow schema, set to None
+            df['primary_input_address'] = None
 
         # Convert to Singapore time
         if not df.empty and 'detected_at' in df.columns:
@@ -387,7 +417,6 @@ def get_whale_stats(period_hours=24):
         SELECT
             COUNT(*) as transaction_count,
             SUM(value_btc) as total_btc,
-            SUM(value_usd) as total_usd,
             AVG(value_btc) as avg_btc,
             MAX(value_btc) as max_btc,
             MIN(value_btc) as min_btc
@@ -397,7 +426,16 @@ def get_whale_stats(period_hours=24):
         df = pd.read_sql_query(query, engine)
 
         if not df.empty:
-            return df.iloc[0].to_dict()
+            stats = df.iloc[0].to_dict()
+            # Calculate USD values from current BTC price
+            latest_price = get_latest_price()
+            if latest_price is not None and 'close' in latest_price:
+                btc_price = latest_price['close']
+            else:
+                btc_price = 110000  # Fallback approximate price
+            
+            stats['total_usd'] = stats['total_btc'] * btc_price if stats['total_btc'] else 0
+            return stats
         return None
     except Exception as e:
         st.warning(f"Could not fetch whale stats: {str(e)}")
@@ -421,29 +459,68 @@ def get_whale_trend(interval='1 hour', limit=24):
         return pd.DataFrame()
 
     try:
-        # Map interval to aggregate table
+        # Check if aggregate views exist, otherwise compute from raw data
+        # First try to use aggregate views
         table_map = {
             '1 hour': 'whale_stats_1h',
             '1 day': 'whale_stats_1d'
         }
 
         table = table_map.get(interval, 'whale_stats_1h')
-
-        query = f"""
-        SELECT
-            bucket,
-            transaction_count,
-            total_btc,
-            total_usd,
-            avg_btc,
-            max_btc
-        FROM {table}
-        ORDER BY bucket DESC
-        LIMIT {limit}
-        """
-        df = pd.read_sql_query(query, engine)
-        df = df.sort_values('bucket')  # Sort ascending for charts
-        return df
+        
+        # Try to query aggregate view first
+        try:
+            query = f"""
+            SELECT
+                bucket,
+                transaction_count,
+                total_btc,
+                avg_btc,
+                max_btc
+            FROM {table}
+            ORDER BY bucket DESC
+            LIMIT {limit}
+            """
+            df = pd.read_sql_query(query, engine)
+            
+            # Calculate total_usd from current BTC price
+            latest_price = get_latest_price()
+            if latest_price is not None and 'close' in latest_price:
+                btc_price = latest_price['close']
+            else:
+                btc_price = 110000  # Fallback
+            
+            df['total_usd'] = df['total_btc'] * btc_price
+            df = df.sort_values('bucket')  # Sort ascending for charts
+            return df
+        except Exception:
+            # Aggregate view doesn't exist, compute from raw data
+            time_bucket = '1 hour' if interval == '1 hour' else '1 day'
+            query = f"""
+            SELECT
+                time_bucket('{time_bucket}', detected_at) AS bucket,
+                COUNT(*) AS transaction_count,
+                SUM(value_btc) AS total_btc,
+                AVG(value_btc) AS avg_btc,
+                MAX(value_btc) AS max_btc
+            FROM whale_transactions
+            WHERE detected_at > NOW() - INTERVAL '{limit * (24 if interval == "1 day" else 1)} hours'
+            GROUP BY bucket
+            ORDER BY bucket DESC
+            LIMIT {limit}
+            """
+            df = pd.read_sql_query(query, engine)
+            
+            # Calculate total_usd
+            latest_price = get_latest_price()
+            if latest_price is not None and 'close' in latest_price:
+                btc_price = latest_price['close']
+            else:
+                btc_price = 110000
+            
+            df['total_usd'] = df['total_btc'] * btc_price
+            df = df.sort_values('bucket')
+            return df
     except Exception as e:
         st.warning(f"Could not fetch whale trends: {str(e)}")
         return pd.DataFrame()
