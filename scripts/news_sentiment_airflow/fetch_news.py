@@ -196,7 +196,7 @@ class NewsAggregator:
             return []
 
         MAX_CHUNK_DAYS = 14
-        OVERLAP_DAYS = 7  # Overlap between chunks in days
+        OVERLAP_DAYS = 6  # Overlap between chunks in days
         now = datetime.now(timezone.utc)
         start_time = now - timedelta(hours=hours_back)
         all_articles = []
@@ -215,7 +215,7 @@ class NewsAggregator:
                 "time_to": time_to,
                 "limit": "1000",
                 "apikey": self.alpha_vantage_api_key,
-                "sort": "RELEVANCE"  # Fixed typo
+                "sort": "RELEVANCE"
             }
 
             try:
