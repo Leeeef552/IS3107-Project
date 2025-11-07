@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 import os
 from airflow import DAG
 from airflow.operators.python import PythonOperator
@@ -16,6 +16,7 @@ default_args = {
     "owner": "airflow",
     "depends_on_past": False,
     "retries": 1,
+    "retry_delay": timedelta(minutes=5),
 }
 
 with DAG(
@@ -42,6 +43,7 @@ with DAG(
     backfill_task = PythonOperator(
         task_id="backfill_price",
         python_callable=backfill_price,
+        execution_timeout=timedelta(hours=2),  # Set 2 hour timeout to prevent zombie tasks
     )
 
     # ------------------------------------------------------------------
