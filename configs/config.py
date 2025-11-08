@@ -9,6 +9,7 @@ load_dotenv()
 DATA_DIR = os.getenv("DATA_DIR", "historical_data")
 SCHEMA_DIR = os.getenv("SCHEMA_DIR", "schema")
 AGGREGATES_DIR = os.path.join(SCHEMA_DIR, "aggregates")
+TRAINING_DIR = os.getenv("TRAINING_DIR")
 
 # ----------------------------------------------------------------------
 # 📊 Dataset
