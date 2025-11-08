@@ -16,7 +16,7 @@ with DAG(
     default_args=default_args,
     description='One-time load of 1-year Fear & Greed Index',
     schedule_interval='@once',
-    start_date=datetime(2025, 11, 5),
+    start_date=datetime(2025, 1, 1),
     catchup=False,
     tags=['fng', 'init', "crypto"],
 ) as dag:
