@@ -23,8 +23,8 @@ with DAG(
     dag_id="price_init_dag",
     description="Full crypto price ETL and aggregation pipeline",
     default_args=default_args,
-    start_date=datetime(2025, 10, 23),
     schedule_interval='@once',
+    start_date=datetime(2025, 1, 1),
     catchup=False,
     tags=["price", "etl", "crypto"],
 ) as dag:

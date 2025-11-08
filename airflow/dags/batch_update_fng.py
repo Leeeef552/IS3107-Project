@@ -16,7 +16,7 @@ with DAG(
     default_args=default_args,
     description='Daily Fear & Greed Index update',
     schedule_interval='@daily',
-    start_date=datetime(2025, 11, 6),
+    start_date=datetime(2025, 1, 1),
     catchup=False,
     tags=['fng', 'daily', "crypto"],
 ) as dag:

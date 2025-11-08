@@ -54,3 +54,4 @@ with DAG(
     # TASK DEPENDENCIES
     # -----------------------------------------------------------------
     update_price_task >> update_sentiment_task
+

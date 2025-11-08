@@ -20,8 +20,8 @@ with DAG(
     dag_id="batch_update_whale",
     description="Real-time monitoring DAG that fetches and processes the latest whale transactions every 10 minutes",
     default_args=default_args,
-    schedule_interval="*/10 * * * *",
     start_date=datetime(2025, 1, 1),
+    schedule_interval="*/10 * * * *",
     catchup=False,
     tags=["whale", "crypto", "blockchain"],
 ) as dag:

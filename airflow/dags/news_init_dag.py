@@ -11,9 +11,6 @@ from scripts.news_sentiment_airflow.update_sentiment import backfill_sentiment
 default_args = {
     'owner': 'airflow',
     'depends_on_past': False,
-    'email': ['alerts@yourdomain.com'],
-    'email_on_failure': True,
-    'email_on_retry': False,
     'retries': 1,
     'retry_delay': timedelta(minutes=5),
 }
@@ -23,9 +20,9 @@ with DAG(
     default_args=default_args,
     description='Load news sentiment data into TimescaleDB',
     schedule_interval='@once',
-    start_date=datetime(2025, 10, 31),
+    start_date=datetime(2025, 1, 1),
     catchup=False,
-    tags=['crypto', 'sentiment'],
+    tags=['crypto', 'm'],
 ) as dag:
 
     load_sentiment_task = PythonOperator(
