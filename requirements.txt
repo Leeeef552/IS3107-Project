@@ -1,48 +1,57 @@
-# Core libraries
+# =====================================================================
+# CORE UTILITIES
+# =====================================================================
 requests
 python-dotenv
 websockets
 websocket-client
 
-# Data handling
+# =====================================================================
+# DATA HANDLING
+# =====================================================================
+numpy
 pandas>=2.2.3
 pyarrow>=17.0.0
 fastparquet>=2024.5.0
-numpy
 tabulate
-pytz  # Timezone support for SGT display
+pytz  # Timezone support (e.g. for SGT display)
 
-# Database + SQL
+# =====================================================================
+# DATABASE & CACHING
+# =====================================================================
 sqlalchemy
 psycopg2-binary
 sqlparse
 redis
 scipy
 
-
-# Initial data
+# =====================================================================
+# INITIAL DATA FETCHING
+# =====================================================================
 kagglehub
 
 # =====================================================================
-# SENTIMENT ANALYSIS DEPENDENCIES
+# SENTIMENT ANALYSIS
 # =====================================================================
 
-# News Sources
+# News & Community Data Sources
 newsapi-python          # NewsAPI client for professional news
 praw                    # Reddit API client for community sentiment
 
-# Sentiment Analysis
-transformers>=4.30.0    # HuggingFace transformers for FinBERT
-torch>=2.0.0           # PyTorch for deep learning models
-vaderSentiment         # VADER sentiment analyzer (fallback)
+# Machine Learning & NLP
+scikit-learn
+matplotlib
+transformers>=4.30.0    # HuggingFace Transformers (e.g. FinBERT)
+torch>=2.0.0            # PyTorch for model inference
+vaderSentiment          # VADER sentiment analyzer (fallback / lightweight)
 
-# Model optimization (optional but recommended)
-sentencepiece          # Required by some transformer models
-accelerate             # Speed up model loading
+# Model Optimization & Tokenization
+sentencepiece           # Required by some transformer models
+accelerate              # Optimizes model loading and inference
 
 # =====================================================================
-# STREAMLIT DASHBOARD DEPENDENCIES
+# STREAMLIT DASHBOARD & VISUALIZATION
 # =====================================================================
-streamlit>=1.28.0      # Interactive dashboard framework
-plotly>=5.17.0         # Interactive charts and visualizations
-watchdog               # File system monitoring for hot-reloading
+streamlit>=1.28.0       # Interactive web dashboard framework
+plotly>=5.17.0          # Interactive charts and plots
+watchdog                # Auto-reload when files change
