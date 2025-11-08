@@ -34,6 +34,7 @@ x-airflow-common: &airflow-common
     - ./scripts:/opt/scripts # Project Python scripts used by DAGs
     - ./utils:/opt/utils # Helper/utility scripts
     - ./historical_data:/opt/historical_data # Local folder for downloaded data (e.g., price history)
+    - ./training:/opt/training # Local folder for training data and intermediate files 
 
   user: "${AIRFLOW_UID:-50000}:0" # Default user to avoid permission issues
   depends_on: &airflow-common-depends-on
