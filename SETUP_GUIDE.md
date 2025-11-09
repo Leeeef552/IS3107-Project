@@ -340,10 +340,56 @@ The dashboard will automatically refresh every 60 seconds and display:
 
 - Real-time Bitcoin price metrics
 - Interactive OHLCV price charts
+- Real-time order book and market depth chart
 - News sentiment analysis
 - Fear & Greed Index
 - Latest news articles
 - Whale transaction alerts (if whale monitoring is enabled)
+
+### Step 6: Test Order Book WebSocket (Optional)
+
+To verify the order book feature is working correctly, run the test script:
+
+**macOS/Linux:**
+
+```bash
+python scripts/test_orderbook_stream.py
+```
+
+**Windows:**
+
+```cmd
+python scripts\test_orderbook_stream.py
+```
+
+This will:
+- Connect to Binance WebSocket for order book data
+- Display 5 updates showing bid/ask levels
+- Verify the connection is working properly
+
+**Expected output:**
+```
+============================================================
+Binance Order Book WebSocket Test
+============================================================
+
+Starting order book stream...
+Waiting for initial data...
+
+Update #1
+============================================================
+Last Update: 2025-11-09 14:30:15.123456+00:00
+
+📊 Order Book Stats:
+   Bid Levels: 1000
+   Ask Levels: 1000
+
+💰 Best Prices:
+   Best Bid:  $   94,520.50 x   2.3456 BTC
+   Best Ask:  $   94,521.00 x   1.8765 BTC
+   Mid Price: $   94,520.75
+   Spread:    $        0.50 (0.001%)
+```
 
 ---
 
@@ -365,6 +411,7 @@ Follow this checklist to ensure everything is set up correctly:
 - [ ] `.env` updated with `localhost` for local Python scripts
 - [ ] Streamlit dashboard accessible at http://localhost:8501
 - [ ] Dashboard shows price data and charts
+- [ ] Order book WebSocket test completed successfully (optional)
 
 ---
 

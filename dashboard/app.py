@@ -33,6 +33,7 @@ from dashboard.data_queries import (
     get_whale_trend
 )
 from dashboard.binance_ws import start_price_stream, get_realtime_price
+from dashboard.cryptocompare_orderbook_ws import start_orderbook_stream, get_orderbook_data
 
 # Page configuration
 st.set_page_config(
@@ -108,11 +109,12 @@ st.markdown("""
         overflow: visible !important;
     }
     
-    /* Ensure metric values aren't clipped */
+    /* Ensure metric values aren't clipped - reduce font size for better fit */
     [data-testid="stMetricValue"] {
         overflow: visible !important;
         line-height: 1.2 !important;
         padding: 0.25rem 0 !important;
+        font-size: 1.5rem !important;
     }
     
     /* Fix for Streamlit column containers */
@@ -120,18 +122,25 @@ st.markdown("""
         overflow: visible !important;
     }
     
-    /* Ensure all metric-related elements have proper spacing */
-    [data-testid="stMetricLabel"],
+    /* Ensure all metric-related elements have proper spacing - smaller labels */
+    [data-testid="stMetricLabel"] {
+        overflow: visible !important;
+        padding: 0.1rem 0 !important;
+        font-size: 0.75rem !important;
+    }
+    
     [data-testid="stMetricDelta"] {
         overflow: visible !important;
         padding: 0.1rem 0 !important;
+        font-size: 0.75rem !important;
     }
     
-    /* Fix for custom price display */
+    /* Fix for custom price display - reduce size slightly */
     .price-number {
         overflow: visible !important;
         line-height: 1.2 !important;
         padding: 0.25rem 0 !important;
+        font-size: 2rem !important;
     }
     .news-card {
         background: linear-gradient(135deg, #2C2C2C 0%, #1E1E1E 100%);
@@ -620,6 +629,257 @@ def create_whale_chart(df):
     return fig
 
 
+def create_orderbook_table(orderbook_data):
+    """Create order book table display"""
+    if not orderbook_data:
+        return None
+    
+    bids = orderbook_data.get('bids', [])
+    asks = orderbook_data.get('asks', [])
+    
+    if not bids or not asks:
+        return None
+    
+    # Get top 20 levels
+    bids = bids[:20]
+    asks = asks[:20]
+    
+    # Create dataframes with error handling
+    try:
+        bids_df = pd.DataFrame(bids)
+        asks_df = pd.DataFrame(asks)
+        
+        # Add cumulative totals
+        if not bids_df.empty and 'quantity' in bids_df.columns and 'price' in bids_df.columns:
+            bids_df['total'] = bids_df['quantity'].cumsum()
+            bids_df = bids_df.sort_values('price', ascending=False)
+        else:
+            return None
+        
+        if not asks_df.empty and 'quantity' in asks_df.columns and 'price' in asks_df.columns:
+            asks_df['total'] = asks_df['quantity'].cumsum()
+            asks_df = asks_df.sort_values('price', ascending=True)
+        else:
+            return None
+        
+        return bids_df, asks_df
+    except Exception as e:
+        print(f"Error creating orderbook table: {e}")
+        return None
+
+
+def create_depth_chart(orderbook_data, current_price=None):
+    """
+    Create professional exchange-style order book depth chart (Binance/Bitstamp style).
+    
+    This chart shows cumulative order book depth with:
+    1. Step-style lines for smooth staircase look
+    2. Semi-transparent gradient fills
+    3. Interactive hover tooltips
+    4. Vertical line at mid/current price
+    5. Professional color scheme: green (bids), red (asks)
+    6. Responsive layout with proper aspect ratio
+    """
+    if not orderbook_data:
+        return None
+    
+    bids = orderbook_data.get('bids', [])
+    asks = orderbook_data.get('asks', [])
+    
+    if not bids or not asks:
+        return None
+    
+    try:
+        # Convert to pandas DataFrames for easier manipulation
+        bids_df = pd.DataFrame(bids)
+        asks_df = pd.DataFrame(asks)
+        
+        # Validate required columns exist
+        if 'price' not in bids_df.columns or 'quantity' not in bids_df.columns:
+            return None
+        if 'price' not in asks_df.columns or 'quantity' not in asks_df.columns:
+            return None
+        
+        # Sort: bids descending (highest first), asks ascending (lowest first)
+        bids_df = bids_df.sort_values('price', ascending=False).reset_index(drop=True)
+        asks_df = asks_df.sort_values('price', ascending=True).reset_index(drop=True)
+        
+        # Calculate cumulative amounts (depth) - this creates the classic depth chart shape
+        bids_df['cum_quantity'] = bids_df['quantity'].cumsum()
+        asks_df['cum_quantity'] = asks_df['quantity'].cumsum()
+        
+        # Calculate mid price
+        if current_price:
+            mid_price = current_price
+            label = "Current Price"
+        elif len(bids_df) > 0 and len(asks_df) > 0:
+            best_bid = bids_df['price'].iloc[0]
+            best_ask = asks_df['price'].iloc[0]
+            mid_price = (best_bid + best_ask) / 2
+            spread = best_ask - best_bid
+            spread_pct = (spread / best_bid) * 100
+            label = f"Mid: ${mid_price:,.2f}"
+        else:
+            mid_price = None
+            label = ""
+        
+        # Create figure with optimized settings
+        fig = go.Figure()
+        
+        # Add bid side (buy orders) - GREEN with enhanced styling
+        fig.add_trace(go.Scatter(
+            x=bids_df['price'],
+            y=bids_df['cum_quantity'],
+            mode='lines',
+            name='Bids',
+            line=dict(
+                color='rgb(0, 230, 118)',  # Bright green (Binance-style)
+                width=2.5,
+                shape='hv'  # Horizontal-vertical step for staircase effect
+            ),
+            fill='tozeroy',
+            fillcolor='rgba(0, 230, 118, 0.15)',  # Subtle green gradient
+            fillgradient=dict(
+                type='vertical',
+                colorscale=[[0, 'rgba(0, 230, 118, 0.3)'], [1, 'rgba(0, 230, 118, 0.05)']]
+            ),
+            hovertemplate=(
+                '<b style="color:#00E676">BUY SIDE</b><br>' +
+                '<b>Price:</b> $%{x:,.2f}<br>' +
+                '<b>Cumulative:</b> %{y:.4f} BTC<br>' +
+                '<b>Total Value:</b> $%{customdata:,.0f}<br>' +
+                '<extra></extra>'
+            ),
+            customdata=bids_df['cum_quantity'] * bids_df['price']
+        ))
+        
+        # Add ask side (sell orders) - RED with enhanced styling
+        fig.add_trace(go.Scatter(
+            x=asks_df['price'],
+            y=asks_df['cum_quantity'],
+            mode='lines',
+            name='Asks',
+            line=dict(
+                color='rgb(246, 70, 93)',  # Bright red (Binance-style)
+                width=2.5,
+                shape='hv'  # Step line for staircase effect
+            ),
+            fill='tozeroy',
+            fillcolor='rgba(246, 70, 93, 0.15)',  # Subtle red gradient
+            fillgradient=dict(
+                type='vertical',
+                colorscale=[[0, 'rgba(246, 70, 93, 0.3)'], [1, 'rgba(246, 70, 93, 0.05)']]
+            ),
+            hovertemplate=(
+                '<b style="color:#F6465D">SELL SIDE</b><br>' +
+                '<b>Price:</b> $%{x:,.2f}<br>' +
+                '<b>Cumulative:</b> %{y:.4f} BTC<br>' +
+                '<b>Total Value:</b> $%{customdata:,.0f}<br>' +
+                '<extra></extra>'
+            ),
+            customdata=asks_df['cum_quantity'] * asks_df['price']
+        ))
+        
+        # Add vertical line at mid/current price with annotation
+        if mid_price:
+            # Add subtle background area at mid price
+            max_depth = max(
+                bids_df['cum_quantity'].max() if len(bids_df) > 0 else 0,
+                asks_df['cum_quantity'].max() if len(asks_df) > 0 else 0
+            )
+            
+            fig.add_vline(
+                x=mid_price,
+                line_dash="dot",
+                line_color="rgba(255, 193, 7, 0.8)",  # Amber/yellow
+                line_width=2.5,
+                opacity=1
+            )
+            
+            # Add annotation with better styling
+            fig.add_annotation(
+                x=mid_price,
+                y=max_depth * 0.95,
+                text=label,
+                showarrow=True,
+                arrowhead=2,
+                arrowsize=1,
+                arrowwidth=2,
+                arrowcolor="rgba(255, 193, 7, 0.8)",
+                ax=0,
+                ay=-40,
+                bgcolor="rgba(255, 193, 7, 0.2)",
+                bordercolor="rgba(255, 193, 7, 0.8)",
+                borderwidth=2,
+                borderpad=6,
+                font=dict(size=12, color="white", family="Arial Black")
+            )
+        
+        # Professional layout matching Binance/Bitstamp style
+        fig.update_layout(
+            title={
+                'text': "<b>Market Depth</b>",
+                'x': 0.5,
+                'xanchor': 'center',
+                'font': {'size': 20, 'color': '#E0E0E0', 'family': 'Arial Black'}
+            },
+            xaxis_title="<b>Price (USD)</b>",
+            yaxis_title="<b>Cumulative Volume (BTC)</b>",
+            template='plotly_dark',
+            height=550,
+            hovermode='x unified',
+            showlegend=True,
+            legend=dict(
+                orientation="h",
+                yanchor="bottom",
+                y=1.02,
+                xanchor="center",
+                x=0.5,
+                bgcolor="rgba(30, 30, 30, 0.8)",
+                bordercolor="rgba(255, 255, 255, 0.3)",
+                borderwidth=1,
+                font=dict(size=12, color="white", family="Arial")
+            ),
+            margin=dict(l=70, r=50, t=100, b=70),
+            plot_bgcolor='#161A1E',  # Darker background
+            paper_bgcolor='#0E1117',
+            xaxis=dict(
+                gridcolor='rgba(128, 128, 128, 0.15)',
+                gridwidth=1,
+                zeroline=False,
+                tickformat='$,.0f',
+                tickfont=dict(size=11, color='#B0B0B0'),
+                title_font=dict(size=13, color='#E0E0E0')
+            ),
+            yaxis=dict(
+                gridcolor='rgba(128, 128, 128, 0.15)',
+                gridwidth=1,
+                zeroline=False,
+                tickformat='.3f',
+                tickfont=dict(size=11, color='#B0B0B0'),
+                title_font=dict(size=13, color='#E0E0E0')
+            ),
+            hoverlabel=dict(
+                bgcolor="rgba(30, 30, 30, 0.95)",
+                font_size=12,
+                font_family="Arial",
+                bordercolor="rgba(255, 255, 255, 0.3)"
+            )
+        )
+        
+        # Add range slider for better interaction (optional, can be removed if too cluttered)
+        fig.update_xaxes(
+            rangeslider_visible=False,  # Keep it clean like exchanges
+            fixedrange=False  # Allow zoom
+        )
+        
+        return fig
+    
+    except Exception as e:
+        print(f"Error creating depth chart: {e}")
+        return None
+
+
 def main():
     """Main dashboard function"""
     
@@ -627,6 +887,11 @@ def main():
     if 'ws_initialized' not in st.session_state:
         start_price_stream()
         st.session_state.ws_initialized = True
+    
+    # Initialize WebSocket order book streamer (runs in background thread)
+    if 'orderbook_ws_initialized' not in st.session_state:
+        start_orderbook_stream()
+        st.session_state.orderbook_ws_initialized = True
     
     # Header
     st.markdown('<h1 class="main-header">Bitcoin Analytics Dashboard</h1>', 
@@ -813,13 +1078,13 @@ def main():
             # Use same structure and classes as Streamlit metrics for consistency
             price_html = f"""
             <div style="margin-bottom: 0.5rem;">
-                <div style="font-size: 0.875rem; color: rgb(163, 168, 184); margin-bottom: 0.25rem;">
+                <div style="font-size: 0.75rem; color: rgb(163, 168, 184); margin-bottom: 0.25rem;">
                     Current Price ({currency})
                 </div>
-                <div class="price-number {flash_class}" id="{price_id}" style="font-size: 2.5rem; font-weight: 600; line-height: 1.2; color: #FFFFFF;">
+                <div class="price-number {flash_class}" id="{price_id}" style="font-size: 2rem; font-weight: 600; line-height: 1.2; color: #FFFFFF;">
                     {currency_symbol}{current_price:,.2f}
                 </div>
-                <div style="font-size: 0.875rem; color: {'#10B981' if current_price >= open_price else '#EF4444'}; margin-top: 0.25rem;">
+                <div style="font-size: 0.75rem; color: {'#10B981' if current_price >= open_price else '#EF4444'}; margin-top: 0.25rem;">
                     {percent_change_str}
                 </div>
             </div>
@@ -1243,9 +1508,137 @@ def main():
             See [WHALE_MONITOR_README.md](https://github.com/your-repo) for full documentation.
             """)
 
+    st.divider()
+    
+    # Section 5: Order Book and Depth Chart
+    st.subheader("📊 Order Book & Market Depth")
+    
+    # Get order book data from WebSocket
+    orderbook_data = get_orderbook_data()
+    
+    # Check if we have valid order book data
+    has_valid_data = (
+        orderbook_data 
+        and isinstance(orderbook_data, dict)
+        and orderbook_data.get('bids') 
+        and orderbook_data.get('asks')
+        and len(orderbook_data['bids']) > 0
+        and len(orderbook_data['asks']) > 0
+    )
+    
+    if has_valid_data:
+        # Display last update time
+        last_update = orderbook_data.get('last_update')
+        if last_update:
+            singapore_tz = pytz.timezone('Asia/Singapore')
+            if last_update.tzinfo is None:
+                last_update = pytz.UTC.localize(last_update)
+            last_update_sgt = last_update.astimezone(singapore_tz)
+            st.caption(f"📡 Live Order Book - Last Update: {last_update_sgt.strftime('%Y-%m-%d %H:%M:%S')} SGT")
+        
+        # Show spread info
+        try:
+            best_bid = orderbook_data['bids'][0]['price']
+            best_ask = orderbook_data['asks'][0]['price']
+            spread = best_ask - best_bid
+            spread_pct = (spread / best_bid) * 100
+            mid_price = (best_bid + best_ask) / 2
+            
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                st.metric(label="Best Bid", value=f"${best_bid:,.2f}")
+            with col2:
+                st.metric(label="Best Ask", value=f"${best_ask:,.2f}")
+            with col3:
+                st.metric(label="Spread", value=f"${spread:.2f}", delta=f"{spread_pct:.3f}%")
+            with col4:
+                st.metric(label="Mid Price", value=f"${mid_price:,.2f}")
+        except (KeyError, IndexError, TypeError) as e:
+            print(f"Error calculating spread: {e}")
+            mid_price = None
+        
+        # Depth Chart - pass current price for vertical line indicator
+        depth_chart = create_depth_chart(orderbook_data, current_price=mid_price)
+        if depth_chart:
+            st.plotly_chart(depth_chart, use_container_width=True)
+        else:
+            st.warning("⚠️ Unable to render depth chart. Data may be incomplete.")
+        
+        # Order Book Table (top 20 levels each side)
+        st.markdown("### 📖 Order Book")
+        
+        orderbook_tables = create_orderbook_table(orderbook_data)
+        if orderbook_tables:
+            bids_df, asks_df = orderbook_tables
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.markdown("#### 🟢 Bids (Buy Orders)")
+                if not bids_df.empty:
+                    # Format the dataframe for display
+                    display_bids = bids_df.copy()
+                    display_bids['price'] = display_bids['price'].apply(lambda x: f"${x:,.2f}")
+                    display_bids['quantity'] = display_bids['quantity'].apply(lambda x: f"{x:.4f}")
+                    display_bids['total'] = display_bids['total'].apply(lambda x: f"{x:.4f}")
+                    display_bids.columns = ['Price', 'Quantity (BTC)', 'Total (BTC)']
+                    
+                    st.dataframe(
+                        display_bids,
+                        hide_index=True,
+                        use_container_width=True,
+                        height=400
+                    )
+                else:
+                    st.info("No bid data available")
+            
+            with col2:
+                st.markdown("#### 🔴 Asks (Sell Orders)")
+                if not asks_df.empty:
+                    # Format the dataframe for display
+                    display_asks = asks_df.copy()
+                    display_asks['price'] = display_asks['price'].apply(lambda x: f"${x:,.2f}")
+                    display_asks['quantity'] = display_asks['quantity'].apply(lambda x: f"{x:.4f}")
+                    display_asks['total'] = display_asks['total'].apply(lambda x: f"{x:.4f}")
+                    display_asks.columns = ['Price', 'Quantity (BTC)', 'Total (BTC)']
+                    
+                    st.dataframe(
+                        display_asks,
+                        hide_index=True,
+                        use_container_width=True,
+                        height=400
+                    )
+                else:
+                    st.info("No ask data available")
+        else:
+            st.warning("⚠️ Unable to display order book table. Please wait for data to load.")
+    else:
+        # Show loading state with better UI
+        st.info("🔄 Connecting to Binance order book stream...")
+        
+        # Create placeholder for depth chart
+        with st.container():
+            st.markdown("### Market Depth")
+            st.empty()
+            col1, col2, col3 = st.columns([1, 2, 1])
+            with col2:
+                st.info("📊 Market depth chart will appear once data is loaded...")
+        
+        # Create placeholders for order book tables
+        st.markdown("### 📖 Order Book")
+        col1, col2 = st.columns(2)
+        with col1:
+            st.markdown("#### 🟢 Bids (Buy Orders)")
+            st.info("Waiting for bid data...")
+        with col2:
+            st.markdown("#### 🔴 Asks (Sell Orders)")
+            st.info("Waiting for ask data...")
+        
+        st.caption("💡 The order book data will appear once the WebSocket connection is established. This usually takes a few seconds.")
+
     # Footer
     st.divider()
-    st.caption("Data sources: Binance WebSocket (real-time prices), NewsAPI/CryptoCompare/Reddit (news), Alternative.me (Fear & Greed), Mempool.space (whale txs)")
+    st.caption("Data sources: Binance WebSocket (real-time prices & order book), NewsAPI/CryptoCompare/Reddit (news), Alternative.me (Fear & Greed), Mempool.space (whale txs)")
     st.caption("This dashboard is for educational purposes only. Not financial advice.")
     
     # Auto-refresh every 1 second for real-time price updates
