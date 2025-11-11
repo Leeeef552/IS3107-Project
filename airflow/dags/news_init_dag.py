@@ -5,8 +5,8 @@ Airflow DAG for loading news sentiment data into TimescaleDB
 from datetime import datetime, timedelta
 from airflow import DAG
 from airflow.operators.python import PythonOperator
-from scripts.news_sentiment_airflow.load_sentiment import load_sentiment
-from scripts.news_sentiment_airflow.update_sentiment import backfill_sentiment
+from scripts.news_sentiment.load_sentiment import load_sentiment
+from scripts.news_sentiment.update_sentiment import backfill_sentiment
 
 default_args = {
     'owner': 'airflow',

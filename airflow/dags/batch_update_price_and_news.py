@@ -3,8 +3,8 @@ from airflow import DAG
 from airflow.operators.python import PythonOperator
 
 # Import your existing scripts
-from scripts.price_airflow.update_price import update_price
-from scripts.news_sentiment_airflow.update_sentiment import update_sentiment_pipeline
+from scripts.price.update_price import update_price
+from scripts.news_sentiment.update_sentiment import update_sentiment_pipeline
 
 # ---------------------------------------------------------------------
 # DEFAULT DAG SETTINGS

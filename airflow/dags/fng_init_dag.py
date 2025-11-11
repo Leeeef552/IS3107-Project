@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta
 from airflow import DAG
 from airflow.operators.python import PythonOperator
-from scripts.fng_airflow.init_fng import load_fng
+from scripts.fng.init_fng import load_fng
 
 default_args = {
     'owner': 'airflow',

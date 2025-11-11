@@ -3,10 +3,10 @@ import os
 from airflow import DAG
 from airflow.operators.python import PythonOperator
 
-from scripts.price_airflow.init_historical_price import init_historical_price
-from scripts.price_airflow.backfill_price import backfill_price
-from scripts.price_airflow.load_price import load_price
-from scripts.price_airflow.create_aggregates import create_aggregate
+from scripts.price.init_historical_price import init_historical_price
+from scripts.price.backfill_price import backfill_price
+from scripts.price.load_price import load_price
+from scripts.price.create_aggregates import create_aggregate
 from configs.config import AGGREGATES_DIR
 
 # ----------------------------------------------------------------------

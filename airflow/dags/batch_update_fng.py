@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta
 from airflow import DAG
 from airflow.operators.python import PythonOperator
-from scripts.fng_airflow.update_fng import update_fng_daily
+from scripts.fng.update_fng import update_fng_daily
 
 default_args = {
     'owner': 'airflow',

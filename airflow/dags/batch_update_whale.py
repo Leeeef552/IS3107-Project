@@ -2,10 +2,10 @@ from datetime import datetime
 from airflow import DAG
 from airflow.operators.python import PythonOperator
 
-from scripts.whale_airflow.fetch_recent_blocks import fetch_recent_blocks
-from scripts.whale_airflow.extract_large_transactions import extract_large_transactions
-from scripts.whale_airflow.load_whale_transactions import load_whale_transactions_to_db
-from scripts.whale_airflow.transform_whale_sentiments import transform_whale_sentiments
+from scripts.whale.fetch_recent_blocks import fetch_recent_blocks
+from scripts.whale.extract_large_transactions import extract_large_transactions
+from scripts.whale.load_whale_transactions import load_whale_transactions_to_db
+from scripts.whale.transform_whale_sentiments import transform_whale_sentiments
 
 # ----------------------------------------------------------------------
 # DAG CONFIG
