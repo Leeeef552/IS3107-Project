@@ -50,7 +50,7 @@ git --version
 Copy the example environment file and configure it:
 
 ```bash
-cd BT3107-Project
+cd IS3107-Project
 cp env.example .env
 ```
 
@@ -82,6 +82,7 @@ AIRFLOW_GID=0
 DATA_DIR=/opt/historical_data
 SCHEMA_DIR=/opt/schema
 AGGREGATES_DIR=/opt/aggregates
+TRAINING_DIR=/opt/training
 ```
 
 **Note:** News sentiment features work with or without API keys, but may have rate limits on free tiers.
@@ -103,7 +104,7 @@ mkdir -p airflow/logs airflow/plugins airflow/config
 Build the custom Airflow image with all dependencies:
 
 ```bash
-docker build -t bt3107-project .
+docker build -t IS3107-project .
 ```
 
 This will:
@@ -269,7 +270,7 @@ Create and activate a virtual environment:
 **macOS/Linux:**
 
 ```bash
-cd BT3107-Project
+cd IS3107-Project
 python -m venv .venv
 source .venv/bin/activate
 ```
@@ -399,7 +400,7 @@ Follow this checklist to ensure everything is set up correctly:
 
 - [ ] Docker Desktop is running
 - [ ] `.env` file created and configured
-- [ ] Docker image built (`docker build -t bt3107-project .`)
+- [ ] Docker image built (`docker build -t IS3107-project .`)
 - [ ] All containers started (`docker compose up -d`)
 - [ ] All containers healthy (`docker compose ps`)
 - [ ] Airflow UI accessible at http://localhost:8080

@@ -6,7 +6,7 @@ import torch
 import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
-from scripts.machine_learning.model import LSTM_Model
+from scripts.machine_learning_training.model import LSTM_Model
 from utils.logger import get_logger
 from configs.config import TRAINING_DIR
 from datetime import datetime

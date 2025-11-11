@@ -2,7 +2,7 @@ import os
 import joblib
 import torch
 import torch.nn as nn
-from scripts.machine_learning.model import LSTM_Model
+from scripts.machine_learning_training.model import LSTM_Model
 from datetime import datetime
 from utils.logger import get_logger
 from configs.config import TRAINING_DIR
@@ -126,17 +126,28 @@ def train_model_task(
     **context
 ):
     """
-    Train an LSTM model using data prepared in the previous task.
+    Airflow task: Train an LSTM model using data prepared in the previous step.
 
-    Parameters (via op_kwargs):
-        num_epochs (int)
-        learning_rate (float)
-        weight_decay (float)
-        batch_size (int)
+    - Saves timestamped artifacts:  training_artifacts_YYYYMMDD_HHMMSS.joblib
+    - Also updates 'training_artifacts_latest.joblib' symlink or copy.
+    - Pushes model + artifact paths to XCom.
     """
+    import os
+    import joblib
+    import torch
+    import shutil
+    from datetime import datetime
+    from scripts.machine_learning_training.model import LSTM_Model
+    from utils.logger import get_logger
+    from configs.config import TRAINING_DIR
+    from scripts.machine_learning_training.training import training_pipeline
+
+    logger = get_logger("train_model_task")
     ti = context["ti"]
 
-    # Pull .joblib path from XCom (saved by 'prepare_training_data')
+    # ----------------------------------------------------------------------
+    # Step 1. Pull preprocessed training data
+    # ----------------------------------------------------------------------
     joblib_path = ti.xcom_pull(task_ids='prepare_training_data', key='training_data_path')
     if not joblib_path:
         raise ValueError("❌ No training data path found in XCom. Check 'prepare_training_data' task.")
@@ -150,12 +161,12 @@ def train_model_task(
     Y_test = data['Y_test']
     metadata = data['metadata']
 
-    logger.info(f"✅ Loaded: X_train={X_train.shape}, X_test={X_test.shape}")
-
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     logger.info(f"🚀 Using device: {device}")
 
-    # Train model
+    # ----------------------------------------------------------------------
+    # Step 2. Train model
+    # ----------------------------------------------------------------------
     model, train_hist, val_hist = training_pipeline(
         X_train=X_train,
         X_test=X_test,
@@ -168,25 +179,22 @@ def train_model_task(
         device=device
     )
 
-    # Save full training artifacts (model weights + history + metadata)
+    # ----------------------------------------------------------------------
+    # Step 3. Save timestamped artifacts
+    # ----------------------------------------------------------------------
     os.makedirs(os.path.join(TRAINING_DIR, "model"), exist_ok=True)
+
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    best_model_path = os.path.join(TRAINING_DIR, "model", "best_model_regression.pth")
     artifact_path = os.path.join(TRAINING_DIR, "model", f"training_artifacts_{timestamp}.joblib")
 
     joblib.dump({
-        # Essential model components
-        'model_state_dict_path': os.path.join(TRAINING_DIR, "model", "best_model_regression.pth"),
+        'model_state_dict_path': best_model_path,
         'train_loss_history': train_hist,
         'val_loss_history': val_hist,
-        
-        # Test data needed for evaluation
         'X_test': X_test,
         'Y_test': Y_test,
-        
-        # Metadata containing base prices and time indices
         'metadata': metadata,
-        
-        # Training configuration
         'config': {
             'num_epochs': num_epochs,
             'learning_rate': learning_rate,
@@ -199,8 +207,25 @@ def train_model_task(
 
     logger.info(f"💾 Saved training artifacts WITH TEST DATA to: {artifact_path}")
 
-    # Optional: push final model path to XCom
-    ti.xcom_push(key="final_model_path", value=os.path.join(TRAINING_DIR, "model", "best_model_regression.pth"))
-    ti.xcom_push(key="training_artifacts_path", value=artifact_path)
+    # ----------------------------------------------------------------------
+    # Step 4. Maintain 'latest' symlink or copy
+    # ----------------------------------------------------------------------
+    latest_artifact = os.path.join(TRAINING_DIR, "model", "training_artifacts_latest.joblib")
+    try:
+        if os.path.exists(latest_artifact):
+            os.remove(latest_artifact)
+        os.symlink(artifact_path, latest_artifact)
+        logger.info(f"🔗 Updated symlink: {latest_artifact} → {artifact_path}")
+    except (AttributeError, OSError):
+        shutil.copy2(artifact_path, latest_artifact)
+        logger.info(f"📄 Copied latest artifact to {latest_artifact}")
 
+    # ----------------------------------------------------------------------
+    # Step 5. Push paths to XCom
+    # ----------------------------------------------------------------------
+    ti.xcom_push(key="final_model_path", value=best_model_path)
+    ti.xcom_push(key="training_artifacts_path", value=artifact_path)
+    ti.xcom_push(key="training_artifacts_latest", value=latest_artifact)
+
+    logger.info("📤 XCom pushed with final model and artifact paths.")
     return artifact_path
