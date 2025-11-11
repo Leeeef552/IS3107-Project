@@ -30,7 +30,11 @@ from dashboard.data_queries import (
     get_fear_greed_index,
     get_recent_whale_transactions,
     get_whale_stats,
-    get_whale_trend
+    get_whale_trend,
+    get_block_metrics,
+    get_whale_sentiment,
+    get_block_whale_correlation,
+    get_lstm_predictions
 )
 from dashboard.binance_ws import start_price_stream, get_realtime_price
 from dashboard.cryptocompare_orderbook_ws import start_orderbook_stream, get_orderbook_data
@@ -880,6 +884,386 @@ def create_depth_chart(orderbook_data, current_price=None):
         return None
 
 
+def create_block_metrics_chart(df):
+    """Create a chart for block metrics"""
+    if df.empty:
+        return None
+    
+    fig = make_subplots(
+        rows=3, cols=1,
+        shared_xaxes=True,
+        vertical_spacing=0.08,
+        subplot_titles=('Whale Activity (BTC)', 'Exchange Flow (BTC)', 'Consolidation & Distribution'),
+        row_heights=[0.4, 0.3, 0.3]
+    )
+    
+    # Whale activity
+    fig.add_trace(
+        go.Scatter(
+            x=df['block_timestamp'],
+            y=df['whale_total_external_btc'],
+            mode='lines+markers',
+            name='Whale External BTC',
+            line=dict(color='#FF9500', width=2),
+            fill='tozeroy',
+            fillcolor='rgba(255, 149, 0, 0.2)'
+        ),
+        row=1, col=1
+    )
+    
+    # Exchange flow
+    fig.add_trace(
+        go.Scatter(
+            x=df['block_timestamp'],
+            y=df['to_exchange_btc'],
+            mode='lines+markers',
+            name='To Exchange',
+            line=dict(color='#EF4444', width=2)
+        ),
+        row=2, col=1
+    )
+    
+    fig.add_trace(
+        go.Scatter(
+            x=df['block_timestamp'],
+            y=df['from_exchange_btc'],
+            mode='lines+markers',
+            name='From Exchange',
+            line=dict(color='#10B981', width=2)
+        ),
+        row=2, col=1
+    )
+    
+    # Consolidation & Distribution
+    fig.add_trace(
+        go.Scatter(
+            x=df['block_timestamp'],
+            y=df['consolidation_index'],
+            mode='lines+markers',
+            name='Consolidation',
+            line=dict(color='#8B5CF6', width=2)
+        ),
+        row=3, col=1
+    )
+    
+    fig.add_trace(
+        go.Scatter(
+            x=df['block_timestamp'],
+            y=df['distribution_index'],
+            mode='lines+markers',
+            name='Distribution',
+            line=dict(color='#3B82F6', width=2)
+        ),
+        row=3, col=1
+    )
+    
+    fig.update_layout(
+        height=700,
+        template='plotly_dark',
+        hovermode='x unified',
+        margin=dict(l=50, r=50, t=50, b=50),
+        legend=dict(x=1.02, y=1, xanchor='left', yanchor='top', bgcolor='rgba(0,0,0,0)')
+    )
+    
+    fig.update_yaxes(title_text="BTC", row=1, col=1)
+    fig.update_yaxes(title_text="BTC", row=2, col=1)
+    fig.update_yaxes(title_text="Index", row=3, col=1)
+    fig.update_xaxes(title_text="Block Time", row=3, col=1)
+    
+    return fig
+
+
+def create_sentiment_gauge_chart(sentiment_data):
+    """Create a gauge chart for whale sentiment"""
+    if sentiment_data.empty:
+        return None
+    
+    latest_sentiment = sentiment_data.iloc[-1]
+    score = latest_sentiment['score']
+    sentiment_label = latest_sentiment['sentiment']
+    
+    # Define color ranges
+    if sentiment_label == 'bullish':
+        color = "#10B981"  # Green
+    elif sentiment_label == 'bearish':
+        color = "#EF4444"  # Red
+    else:
+        color = "#F59E0B"  # Orange
+    
+    fig = go.Figure(go.Indicator(
+        mode="gauge+number+delta",
+        value=score,
+        domain={'x': [0, 1], 'y': [0, 1]},
+        title={'text': f"<b>Whale Sentiment</b><br><span style='font-size:0.8em;color:{color}'>{sentiment_label.title()}</span>", 
+               'font': {'size': 20}},
+        gauge={
+            'axis': {'range': [-1, 1], 'tickwidth': 1, 'tickcolor': "white"},
+            'bar': {'color': color, 'thickness': 0.75},
+            'bgcolor': "rgba(0,0,0,0)",
+            'borderwidth': 2,
+            'bordercolor': "white",
+            'steps': [
+                {'range': [-1, -0.5], 'color': 'rgba(239, 68, 68, 0.3)'},
+                {'range': [-0.5, 0], 'color': 'rgba(245, 158, 11, 0.3)'},
+                {'range': [0, 0.5], 'color': 'rgba(16, 185, 129, 0.3)'},
+                {'range': [0.5, 1], 'color': 'rgba(5, 150, 105, 0.3)'}
+            ],
+            'threshold': {
+                'line': {'color': "white", 'width': 4},
+                'thickness': 0.75,
+                'value': score
+            }
+        }
+    ))
+    
+    fig.update_layout(
+        height=300,
+        template='plotly_dark',
+        margin=dict(l=20, r=20, t=60, b=20),
+        font={'color': "white", 'family': "Arial"}
+    )
+    
+    return fig
+
+
+def create_sentiment_components_chart(df):
+    """Create a chart showing sentiment components over time"""
+    if df.empty:
+        return None
+    
+    fig = go.Figure()
+    
+    fig.add_trace(
+        go.Scatter(
+            x=df['block_timestamp'],
+            y=df['whale_flow_component'],
+            mode='lines+markers',
+            name='Whale Flow',
+            line=dict(color='#FF9500', width=2)
+        )
+    )
+    
+    fig.add_trace(
+        go.Scatter(
+            x=df['block_timestamp'],
+            y=df['exchange_pressure_component'],
+            mode='lines+markers',
+            name='Exchange Pressure',
+            line=dict(color='#8B5CF6', width=2)
+        )
+    )
+    
+    fig.add_trace(
+        go.Scatter(
+            x=df['block_timestamp'],
+            y=df['fee_pressure_component'],
+            mode='lines+markers',
+            name='Fee Pressure',
+            line=dict(color='#3B82F6', width=2)
+        )
+    )
+    
+    fig.add_trace(
+        go.Scatter(
+            x=df['block_timestamp'],
+            y=df['utilization_component'],
+            mode='lines+markers',
+            name='Utilization',
+            line=dict(color='#10B981', width=2)
+        )
+    )
+    
+    # Add zero line
+    fig.add_hline(y=0, line_dash="dash", line_color="gray", opacity=0.5)
+    
+    fig.update_layout(
+        height=300,
+        title="Sentiment Components Over Time",
+        xaxis_title="Block Time",
+        yaxis_title="Component Value",
+        template='plotly_dark',
+        hovermode='x unified',
+        margin=dict(l=50, r=50, t=50, b=50),
+        legend=dict(x=1.02, y=1, xanchor='left', yanchor='top', bgcolor='rgba(0,0,0,0)')
+    )
+    
+    return fig
+
+
+def create_prediction_metrics(predictions_df):
+    """
+    Create metrics display for LSTM predictions
+    
+    Args:
+        predictions_df: DataFrame with LSTM predictions
+        
+    Returns:
+        None (displays metrics in Streamlit)
+    """
+    if predictions_df.empty:
+        st.info("No prediction data available.")
+        return
+    
+    # Get the latest prediction
+    latest_prediction = predictions_df.iloc[-1]
+    
+    # Calculate percentage changes
+    base_price = latest_prediction['base_price']
+    predicted_low = latest_prediction['predicted_low']
+    predicted_high = latest_prediction['predicted_high']
+    predicted_mean = latest_prediction['predicted_mean']
+    predicted_std = latest_prediction['predicted_std']
+    
+    low_change_pct = ((predicted_low - base_price) / base_price) * 100
+    high_change_pct = ((predicted_high - base_price) / base_price) * 100
+    mean_change_pct = ((predicted_mean - base_price) / base_price) * 100
+    
+    # Display metrics
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        st.metric(
+            label="Predicted Low",
+            value=f"${predicted_low:,.2f}",
+            delta=f"{low_change_pct:.2f}%"
+        )
+    
+    with col2:
+        st.metric(
+            label="Predicted Mean",
+            value=f"${predicted_mean:,.2f}",
+            delta=f"{mean_change_pct:.2f}%"
+        )
+    
+    with col3:
+        st.metric(
+            label="Predicted High",
+            value=f"${predicted_high:,.2f}",
+            delta=f"{high_change_pct:.2f}%"
+        )
+    
+    with col4:
+        st.metric(
+            label="Prediction Std Dev",
+            value=f"${predicted_std:.2f}"
+        )
+    
+    # Display additional info
+    st.caption(f"Base Price: ${base_price:,.2f}")
+    st.caption(f"Prediction Time: {latest_prediction['prediction_time'].strftime('%Y-%m-%d %H:%M:%S')} SGT")
+    st.caption(f"Model Run ID: {latest_prediction['run_id']}")
+
+
+def create_price_range_indicator(predictions_df):
+    """
+    Create a visual indicator showing the predicted price range
+    
+    Args:
+        predictions_df: DataFrame with LSTM predictions
+        
+    Returns:
+        HTML content for the price range indicator
+    """
+    if predictions_df.empty:
+        return None
+    
+    latest_prediction = predictions_df.iloc[-1]
+    base_price = latest_prediction['base_price']
+    predicted_low = latest_prediction['predicted_low']
+    predicted_high = latest_prediction['predicted_high']
+    predicted_mean = latest_prediction['predicted_mean']
+    
+    # Calculate positions for the indicator
+    total_range = predicted_high - predicted_low
+    low_pos = (predicted_low - base_price) / total_range * 100 + 50
+    mean_pos = (predicted_mean - base_price) / total_range * 100 + 50
+    high_pos = (predicted_high - base_price) / total_range * 100 + 50
+    
+    # Determine color for mean based on direction
+    mean_color = "#10B981" if predicted_mean >= base_price else "#EF4444"
+    
+    return f"""
+    <div style="margin: 20px 0;">
+        <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+            <span>${predicted_low:,.2f}</span>
+            <span style="font-weight: bold; color: {mean_color};">${predicted_mean:,.2f}</span>
+            <span>${predicted_high:,.2f}</span>
+        </div>
+        <div style="position: relative; height: 30px; background: linear-gradient(to right, #EF4444, #F59E0B, #10B981); border-radius: 15px;">
+            <div style="position: absolute; left: 50%; top: 0; bottom: 0; width: 2px; background: white;"></div>
+            <div style="position: absolute; left: {low_pos}%; top: 0; bottom: 0; width: 2px; background: white;"></div>
+            <div style="position: absolute; left: {mean_pos}%; top: 0; bottom: 0; width: 4px; background: {mean_color};"></div>
+            <div style="position: absolute; left: {high_pos}%; top: 0; bottom: 0; width: 2px; background: white;"></div>
+            <div style="position: absolute; left: 50%; top: -20px; transform: translateX(-50%); color: white; font-size: 0.8rem;">Base: ${base_price:,.2f}</div>
+        </div>
+    </div>
+    """
+
+
+def create_confidence_gauge(predictions_df):
+    """
+    Create a gauge chart showing prediction confidence based on standard deviation
+    
+    Args:
+        predictions_df: DataFrame with LSTM predictions
+        
+    Returns:
+        Plotly figure
+    """
+    if predictions_df.empty:
+        return None
+    
+    latest_prediction = predictions_df.iloc[-1]
+    base_price = latest_prediction['base_price']
+    predicted_std = latest_prediction['predicted_std']
+    
+    # Calculate confidence as inverse of relative standard deviation
+    # Lower std relative to price means higher confidence
+    relative_std = predicted_std / base_price
+    confidence = max(0, min(100, 100 * (1 - relative_std * 100)))  # Scale to 0-100
+    
+    # Determine color based on confidence level
+    if confidence >= 80:
+        color = "#10B981"  # Green
+    elif confidence >= 60:
+        color = "#F59E0B"  # Orange
+    else:
+        color = "#EF4444"  # Red
+    
+    fig = go.Figure(go.Indicator(
+        mode="gauge+number+delta",
+        value=confidence,
+        domain={'x': [0, 1], 'y': [0, 1]},
+        title={'text': "<b>Prediction Confidence</b>", 'font': {'size': 20}},
+        gauge={
+            'axis': {'range': [0, 100], 'tickwidth': 1, 'tickcolor': "white"},
+            'bar': {'color': color, 'thickness': 0.75},
+            'bgcolor': "rgba(0,0,0,0)",
+            'borderwidth': 2,
+            'bordercolor': "white",
+            'steps': [
+                {'range': [0, 60], 'color': 'rgba(239, 68, 68, 0.3)'},
+                {'range': [60, 80], 'color': 'rgba(245, 158, 11, 0.3)'},
+                {'range': [80, 100], 'color': 'rgba(16, 185, 129, 0.3)'}
+            ],
+            'threshold': {
+                'line': {'color': "white", 'width': 4},
+                'thickness': 0.75,
+                'value': confidence
+            }
+        }
+    ))
+    
+    fig.update_layout(
+        height=300,
+        template='plotly_dark',
+        margin=dict(l=20, r=20, t=60, b=20),
+        font={'color': "white", 'family': "Arial"}
+    )
+    
+    return fig
+
+
 def main():
     """Main dashboard function"""
     
@@ -1323,6 +1707,11 @@ def main():
     # Get whale statistics
     whale_stats = get_whale_stats(period_hours=24)
 
+    # Get block metrics and whale sentiment data
+    block_metrics = get_block_metrics(limit=24)
+    whale_sentiment = get_whale_sentiment(limit=24)
+    block_whale_correlation = get_block_whale_correlation(limit=24)
+
     if whale_stats and whale_stats['transaction_count'] > 0:
         # Display summary metrics
         col1, col2, col3, col4 = st.columns(4)
@@ -1353,131 +1742,245 @@ def main():
                 value=f"{whale_stats['avg_btc']:,.2f} BTC"
             )
 
-        # Single column layout - focus on transactions
-        st.markdown("### Recent Whale Transactions")
+        # Create tabs for different views
+        tab1, tab2, tab3 = st.tabs(["Recent Transactions", "Block Metrics", "Whale Sentiment"])
         
-        # Get recent whales
-        whales = get_recent_whale_transactions(limit=10)
+        with tab1:
+            # Single column layout - focus on transactions
+            st.markdown("### Recent Whale Transactions")
+            
+            # Get recent whales
+            whales = get_recent_whale_transactions(limit=5)
 
-        if not whales.empty:
-            for _, whale in whales.iterrows():
-                # Format time
-                if pd.notna(whale.get('detected_at')):
-                    detected_time = whale['detected_at']
-                    time_str = detected_time.strftime('%Y-%m-%d %H:%M')
-                else:
-                    time_str = "N/A"
+            if not whales.empty:
+                for _, whale in whales.iterrows():
+                    # Format time
+                    if pd.notna(whale.get('detected_at')):
+                        detected_time = whale['detected_at']
+                        time_str = detected_time.strftime('%Y-%m-%d %H:%M')
+                    else:
+                        time_str = "N/A"
 
-                # Get transaction link
-                txid = whale['txid']
-                tx_short = f"{txid[:8]}...{txid[-6:]}"
-                explorer_url = f"https://mempool.space/tx/{txid}"
+                    # Get transaction link
+                    txid = whale['txid']
+                    tx_short = f"{txid[:8]}...{txid[-6:]}"
+                    explorer_url = f"https://mempool.space/tx/{txid}"
 
-                # Status indicator
-                status = whale.get('status', 'mempool')
-                if status == 'confirmed':
-                    status_icon = "✅"
-                    status_color = "#10B981"
-                else:
-                    status_icon = "⏳"
-                    status_color = "#F59E0B"
+                    # Status indicator
+                    status = whale.get('status', 'mempool')
+                    if status == 'confirmed':
+                        status_icon = "✅"
+                        status_color = "#10B981"
+                    else:
+                        status_icon = "⏳"
+                        status_color = "#F59E0B"
 
-                # Get addresses (handle missing columns gracefully)
-                primary_input = whale.get('primary_input_address') or ''
-                primary_output = whale.get('primary_output_address') or ''
-                
-                # If primary_output is not available, try to extract from output_addresses array
-                if not primary_output and 'output_addresses' in whale and pd.notna(whale.get('output_addresses')):
-                    output_addrs = whale['output_addresses']
-                    if isinstance(output_addrs, list) and len(output_addrs) > 0:
-                        primary_output = output_addrs[0]
+                    # Get addresses (handle missing columns gracefully)
+                    primary_input = whale.get('primary_input_address') or ''
+                    primary_output = whale.get('primary_output_address') or ''
+                    
+                    # If primary_output is not available, try to extract from output_addresses array
+                    if not primary_output and 'output_addresses' in whale and pd.notna(whale.get('output_addresses')):
+                        output_addrs = whale['output_addresses']
+                        if isinstance(output_addrs, list) and len(output_addrs) > 0:
+                            primary_output = output_addrs[0]
 
-                # Decode address types
-                def get_address_badge(addr):
-                    """Get badge for address type"""
-                    if not addr or pd.isna(addr):
+                    # Decode address types
+                    def get_address_badge(addr):
+                        """Get badge for address type"""
+                        if not addr or pd.isna(addr):
+                            return ""
+                        if addr.startswith('1'):
+                            return '<span style="background: #6B7280; padding: 2px 6px; border-radius: 4px; font-size: 0.65rem; margin-left: 6px;">Legacy</span>'
+                        elif addr.startswith('3'):
+                            return '<span style="background: #8B5CF6; padding: 2px 6px; border-radius: 4px; font-size: 0.65rem; margin-left: 6px;">Multisig</span>'
+                        elif addr.startswith('bc1q'):
+                            return '<span style="background: #10B981; padding: 2px 6px; border-radius: 4px; font-size: 0.65rem; margin-left: 6px;">SegWit</span>'
+                        elif addr.startswith('bc1p'):
+                            return '<span style="background: #F59E0B; padding: 2px 6px; border-radius: 4px; font-size: 0.65rem; margin-left: 6px;">Taproot</span>'
                         return ""
-                    if addr.startswith('1'):
-                        return '<span style="background: #6B7280; padding: 2px 6px; border-radius: 4px; font-size: 0.65rem; margin-left: 6px;">Legacy</span>'
-                    elif addr.startswith('3'):
-                        return '<span style="background: #8B5CF6; padding: 2px 6px; border-radius: 4px; font-size: 0.65rem; margin-left: 6px;">Multisig</span>'
-                    elif addr.startswith('bc1q'):
-                        return '<span style="background: #10B981; padding: 2px 6px; border-radius: 4px; font-size: 0.65rem; margin-left: 6px;">SegWit</span>'
-                    elif addr.startswith('bc1p'):
-                        return '<span style="background: #F59E0B; padding: 2px 6px; border-radius: 4px; font-size: 0.65rem; margin-left: 6px;">Taproot</span>'
-                    return ""
 
-                from_badge = get_address_badge(primary_input)
-                to_badge = get_address_badge(primary_output)
+                    from_badge = get_address_badge(primary_input)
+                    to_badge = get_address_badge(primary_output)
 
-                # Format addresses for display (truncate if too long)
-                def format_address(addr, max_len=22):
-                    if not addr or pd.isna(addr):
-                        return "N/A"
-                    if len(addr) > max_len:
-                        return f"{addr[:12]}...{addr[-10:]}"
-                    return addr
-                
-                from_addr = format_address(primary_input)
-                to_addr = format_address(primary_output)
+                    # Format addresses for display (truncate if too long)
+                    def format_address(addr, max_len=22):
+                        if not addr or pd.isna(addr):
+                            return "N/A"
+                        if len(addr) > max_len:
+                            return f"{addr[:12]}...{addr[-10:]}"
+                        return addr
+                    
+                    from_addr = format_address(primary_input)
+                    to_addr = format_address(primary_output)
 
-                # Create clickable address links
-                from_addr_link = f"https://mempool.space/address/{primary_input}" if primary_input and pd.notna(primary_input) else "#"
-                to_addr_link = f"https://mempool.space/address/{primary_output}" if primary_output and pd.notna(primary_output) else "#"
+                    # Create clickable address links
+                    from_addr_link = f"https://mempool.space/address/{primary_input}" if primary_input and pd.notna(primary_input) else "#"
+                    to_addr_link = f"https://mempool.space/address/{primary_output}" if primary_output and pd.notna(primary_output) else "#"
 
-                # Get label if available - color code by severity
-                label = whale.get('label', '')
-                label_colors = {
-                    'Whale': {'bg': '#FF9500', 'text': '#FFFFFF'},      # Orange background, white text - most dominant
-                    'Shark': {'bg': '#8B5CF6', 'text': '#FFFFFF'},      # Purple background, white text - medium
-                    'Dolphin': {'bg': '#3B82F6', 'text': '#FFFFFF'}     # Blue background, white text - least intrusive
-                }
-                label_style = label_colors.get(label, {'bg': '#6B7280', 'text': '#FFFFFF'})
-                label_badge = f'<span style="background: {label_style["bg"]}; color: {label_style["text"]}; padding: 3px 8px; border-radius: 4px; font-size: 0.7rem; margin-left: 8px; font-weight: 600; display: inline-block;">{label}</span>' if label else ''
+                    # Get label if available - color code by severity
+                    label = whale.get('label', '')
+                    label_colors = {
+                        'Whale': {'bg': '#FF9500', 'text': '#FFFFFF'},      # Orange background, white text - most dominant
+                        'Shark': {'bg': '#8B5CF6', 'text': '#FFFFFF'},      # Purple background, white text - medium
+                        'Dolphin': {'bg': '#3B82F6', 'text': '#FFFFFF'}     # Blue background, white text - least intrusive
+                    }
+                    label_style = label_colors.get(label, {'bg': '#6B7280', 'text': '#FFFFFF'})
+                    label_badge = f'<span style="background: {label_style["bg"]}; color: {label_style["text"]}; padding: 3px 8px; border-radius: 4px; font-size: 0.7rem; margin-left: 8px; font-weight: 600; display: inline-block;">{label}</span>' if label else ''
 
-                # Display whale card with compact styling
-                st.markdown(f"""
-                <div style="background: linear-gradient(135deg, #1E1E1E 0%, #2C2C2C 100%);
-                            border-radius: 8px; padding: 10px 12px; margin-bottom: 8px;
-                            border-left: 3px solid #FF9500; box-shadow: 0 1px 4px rgba(0,0,0,0.2);">
-                    <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-                        <div style="flex: 1;">
-                            <div style="font-size: 1rem; font-weight: bold; color: #FF9500; margin-bottom: 2px; display: flex; align-items: center;">
-                                {whale['value_btc']:,.2f} BTC {label_badge}
-                            </div>
-                            <div style="font-size: 0.8rem; color: #888; margin-bottom: 6px;">
-                                ${whale.get('value_usd', whale.get('value_btc', 0) * 110000):,.0f}
-                            </div>
-                            <div style="font-size: 0.8rem; color: #FFF; line-height: 1.4;">
-                                <div style="margin-bottom: 3px;">
-                                    <span style="color: #888;">📤 From:</span> 
-                                    <a href="{from_addr_link}" target="_blank" style="color: #FFF; text-decoration: none; font-weight: 500; margin-left: 4px;">{from_addr}</a>{from_badge}
+                    # Display whale card with compact styling
+                    st.markdown(f"""
+                    <div style="background: linear-gradient(135deg, #1E1E1E 0%, #2C2C2C 100%);
+                                border-radius: 8px; padding: 10px 12px; margin-bottom: 8px;
+                                border-left: 3px solid #FF9500; box-shadow: 0 1px 4px rgba(0,0,0,0.2);">
+                        <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                            <div style="flex: 1;">
+                                <div style="font-size: 1rem; font-weight: bold; color: #FF9500; margin-bottom: 2px; display: flex; align-items: center;">
+                                    {whale['value_btc']:,.2f} BTC {label_badge}
                                 </div>
-                                <div style="margin-bottom: 3px;">
-                                    <span style="color: #888;">📥 To:</span> 
-                                    <a href="{to_addr_link}" target="_blank" style="color: #FFF; text-decoration: none; font-weight: 500; margin-left: 4px;">{to_addr}</a>{to_badge}
+                                <div style="font-size: 0.8rem; color: #888; margin-bottom: 6px;">
+                                    ${whale.get('value_usd', whale.get('value_btc', 0) * 110000):,.0f}
                                 </div>
-                                <div style="margin-top: 4px;">
-                                    <a href="{explorer_url}" target="_blank"
-                                       style="color: #10B981; text-decoration: none; font-size: 0.75rem;">
-                                        🔗 {tx_short}
-                                    </a>
+                                <div style="font-size: 0.8rem; color: #FFF; line-height: 1.4;">
+                                    <div style="margin-bottom: 3px;">
+                                        <span style="color: #888;">📤 From:</span> 
+                                        <a href="{from_addr_link}" target="_blank" style="color: #FFF; text-decoration: none; font-weight: 500; margin-left: 4px;">{from_addr}</a>{from_badge}
+                                    </div>
+                                    <div style="margin-bottom: 3px;">
+                                        <span style="color: #888;">📥 To:</span> 
+                                        <a href="{to_addr_link}" target="_blank" style="color: #FFF; text-decoration: none; font-weight: 500; margin-left: 4px;">{to_addr}</a>{to_badge}
+                                    </div>
+                                    <div style="margin-top: 4px;">
+                                        <a href="{explorer_url}" target="_blank"
+                                           style="color: #10B981; text-decoration: none; font-size: 0.75rem;">
+                                            🔗 {tx_short}
+                                        </a>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
-                        <div style="text-align: right; margin-left: 12px; min-width: 120px;">
-                            <div style="font-size: 0.7rem; color: #888; margin-bottom: 4px;">
-                                {time_str}
-                            </div>
-                            <div style="font-size: 0.75rem; color: {status_color}; font-weight: 500;">
-                                {status_icon} {status.title()}
+                            <div style="text-align: right; margin-left: 12px; min-width: 120px;">
+                                <div style="font-size: 0.7rem; color: #888; margin-bottom: 4px;">
+                                    {time_str}
+                                </div>
+                                <div style="font-size: 0.75rem; color: {status_color}; font-weight: 500;">
+                                    {status_icon} {status.title()}
+                                </div>
                             </div>
                         </div>
                     </div>
-                </div>
-                """, unsafe_allow_html=True)
-        else:
-            st.info("No recent whale transactions found.")
+                    """, unsafe_allow_html=True)
+            else:
+                st.info("No recent whale transactions found.")
+        
+        with tab2:
+            # Block Metrics
+            if not block_metrics.empty:
+                # Display metrics
+                col1, col2, col3, col4 = st.columns(4)
+                
+                latest_block = block_metrics.iloc[-1]
+                
+                with col1:
+                    st.metric(
+                        label="Latest Block",
+                        value=f"{latest_block['block_height']:,}"
+                    )
+                
+                with col2:
+                    st.metric(
+                        label="Whale External BTC",
+                        value=f"{latest_block['whale_total_external_btc']:.2f}"
+                    )
+                
+                with col3:
+                    st.metric(
+                        label="To Exchange",
+                        value=f"{latest_block['to_exchange_btc']:.2f}"
+                    )
+                
+                with col4:
+                    st.metric(
+                        label="From Exchange",
+                        value=f"{latest_block['from_exchange_btc']:.2f}"
+                    )
+                
+                # Block metrics chart
+                block_chart = create_block_metrics_chart(block_metrics)
+                if block_chart:
+                    st.plotly_chart(block_chart, use_container_width=True)
+            else:
+                st.info("No block metrics data available.")
+        
+        with tab3:
+            # Whale Sentiment
+            if not whale_sentiment.empty:
+                # Display sentiment gauge
+                col1, col2 = st.columns([1, 2])
+                
+                with col1:
+                    sentiment_gauge = create_sentiment_gauge_chart(whale_sentiment)
+                    if sentiment_gauge:
+                        st.plotly_chart(sentiment_gauge, use_container_width=True)
+                
+                with col2:
+                    # Display sentiment metrics
+                    latest_sentiment = whale_sentiment.iloc[-1]
+                    
+                    st.markdown("### Latest Sentiment Metrics")
+                    
+                    col2_1, col2_2 = st.columns(2)
+                    
+                    with col2_1:
+                        st.metric(
+                            label="Whale Count",
+                            value=int(latest_sentiment['whale_count'])
+                        )
+                        
+                        st.metric(
+                            label="Shark Count",
+                            value=int(latest_sentiment['shark_count'])
+                        )
+                    
+                    with col2_2:
+                        st.metric(
+                            label="Dolphin Count",
+                            value=int(latest_sentiment['dolphin_count'])
+                        )
+                        
+                        st.metric(
+                            label="Sentiment Score",
+                            value=f"{latest_sentiment['score']:.3f}"
+                        )
+                    
+                    # Component breakdown
+                    st.markdown("### Component Breakdown")
+                    
+                    components = [
+                        ("Whale Flow", latest_sentiment['whale_flow_component'], '#FF9500'),
+                        ("Exchange Pressure", latest_sentiment['exchange_pressure_component'], '#8B5CF6'),
+                        ("Fee Pressure", latest_sentiment['fee_pressure_component'], '#3B82F6'),
+                        ("Utilization", latest_sentiment['utilization_component'], '#10B981')
+                    ]
+                    
+                    for name, value, color in components:
+                        st.markdown(f"""
+                        <div style="margin-bottom: 8px;">
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                                <span>{name}</span>
+                                <span>{value:.3f}</span>
+                            </div>
+                            <div style="background-color: #2C2C2C; height: 8px; border-radius: 4px;">
+                                <div style="background-color: {color}; height: 100%; width: {50 + value * 50}%; border-radius: 4px;"></div>
+                            </div>
+                        </div>
+                        """, unsafe_allow_html=True)
+                
+                # Sentiment components chart
+                sentiment_components_chart = create_sentiment_components_chart(whale_sentiment)
+                if sentiment_components_chart:
+                    st.plotly_chart(sentiment_components_chart, use_container_width=True)
+            else:
+                st.info("No whale sentiment data available.")
 
     else:
         st.info("🔍 No whale transactions detected in the last 24 hours. The whale monitor may be starting up or the threshold may be too high. Try running: `python scripts/test_whale_monitor.py`")
@@ -1486,28 +1989,15 @@ def main():
         with st.expander("ℹ️ How to start whale monitoring"):
             st.markdown("""
             **Quick Test (Recommended First)**
-            ```bash
-            python scripts/test_whale_monitor.py
-            ```
+            bash python scripts/test_whale_monitor.py
             This runs with a low threshold (0.01 BTC) to quickly verify the system works.
 
-            **Production Monitoring**
-            ```bash
-            # Default: 50 BTC threshold
-            python scripts/whale_monitor.py
-
-            # Custom threshold
-            python scripts/whale_monitor.py --min-btc 10
-            ```
-
+                        **Production Monitoring**
+            bash # Default: 50 BTC threshold python scripts/whale_monitor.py # Custom threshold python scripts/whale_monitor.py --min-btc 10
             **Check if monitor is running**
-            ```bash
-            ps aux | grep whale_monitor
-            ```
-
+            bash ps aux | grep whale_monitor
             See [WHALE_MONITOR_README.md](https://github.com/your-repo) for full documentation.
             """)
-
     st.divider()
     
     # Section 5: Order Book and Depth Chart
@@ -1636,6 +2126,154 @@ def main():
         
         st.caption("💡 The order book data will appear once the WebSocket connection is established. This usually takes a few seconds.")
 
+    st.divider()
+
+    # Section 6: LSTM Model Predictions
+    st.subheader("🤖 LSTM Price Predictions")
+
+    # Get LSTM predictions
+    lstm_predictions = get_lstm_predictions(limit=5)
+
+    if not lstm_predictions.empty:
+        # Display prediction metrics in a more visually appealing way
+        latest_prediction = lstm_predictions.iloc[-1]
+        
+        # Calculate percentage changes
+        base_price = latest_prediction['base_price']
+        predicted_low = latest_prediction['predicted_low']
+        predicted_high = latest_prediction['predicted_high']
+        predicted_mean = latest_prediction['predicted_mean']
+        predicted_std = latest_prediction['predicted_std']
+        
+        low_change_pct = ((predicted_low - base_price) / base_price) * 100
+        high_change_pct = ((predicted_high - base_price) / base_price) * 100
+        mean_change_pct = ((predicted_mean - base_price) / base_price) * 100
+        
+        # Calculate prediction validity period
+        prediction_time = latest_prediction['prediction_time']
+        prediction_expiry = prediction_time + pd.Timedelta(hours=12)
+        current_time = pd.Timestamp.now(tz='Asia/Singapore')
+        time_remaining = prediction_expiry - current_time
+        
+        # Format time remaining
+        if time_remaining.total_seconds() > 0:
+            hours_remaining = int(time_remaining.total_seconds() // 3600)
+            minutes_remaining = int((time_remaining.total_seconds() % 3600) // 60)
+            time_remaining_str = f"{hours_remaining}h {minutes_remaining}m"
+            validity_color = "#10B981"  # Green if still valid
+        else:
+            time_remaining_str = "Expired"
+            validity_color = "#EF4444"  # Red if expired
+        
+        # Create a visually appealing metrics display
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            # Create a card for the predicted range
+            st.markdown(f"""
+            <div style="background: linear-gradient(135deg, #1E1E1E 0%, #2C2C2C 100%); 
+                        border-radius: 10px; padding: 15px; margin-bottom: 10px; 
+                        border-left: 4px solid #FF9500;">
+                <div style="font-size: 0.9rem; color: #888; margin-bottom: 5px;">Predicted Range</div>
+                <div style="font-size: 1.2rem; font-weight: bold; color: #FF9500; margin-bottom: 5px;">
+                    ${predicted_low:,.2f} - ${predicted_high:,.2f}
+                </div>
+                <div style="font-size: 0.8rem; color: #AAA;">
+                    Range: ${(predicted_high - predicted_low):,.2f} ({((predicted_high - predicted_low) / base_price * 100):.2f}%)
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        with col2:
+            # Create a card for the predicted mean
+            mean_color = "#10B981" if predicted_mean >= base_price else "#EF4444"
+            arrow = "↑" if predicted_mean >= base_price else "↓"
+            
+            st.markdown(f"""
+            <div style="background: linear-gradient(135deg, #1E1E1E 0%, #2C2C2C 100%); 
+                        border-radius: 10px; padding: 15px; margin-bottom: 10px; 
+                        border-left: 4px solid {mean_color};">
+                <div style="font-size: 0.9rem; color: #888; margin-bottom: 5px;">Predicted Mean</div>
+                <div style="font-size: 1.2rem; font-weight: bold; color: {mean_color}; margin-bottom: 5px;">
+                    {arrow} ${predicted_mean:,.2f}
+                </div>
+                <div style="font-size: 0.8rem; color: #AAA;">
+                    Change: {mean_change_pct:+.2f}% from base
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        with col3:
+            # Create a card for the standard deviation
+            st.markdown(f"""
+            <div style="background: linear-gradient(135deg, #1E1E1E 0%, #2C2C2C 100%); 
+                        border-radius: 10px; padding: 15px; margin-bottom: 10px; 
+                        border-left: 4px solid #8B5CF6;">
+                <div style="font-size: 0.9rem; color: #888; margin-bottom: 5px;">Prediction Std Dev</div>
+                <div style="font-size: 1.2rem; font-weight: bold; color: #8B5CF6; margin-bottom: 5px;">
+                    ${predicted_std:.2f}
+                </div>
+                <div style="font-size: 0.8rem; color: #AAA;">
+                    {(predicted_std / base_price * 100):.2f}% of base price
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        # Add a two-column layout for the confidence gauge and prediction validity
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            # Add confidence gauge
+            confidence_gauge = create_confidence_gauge(lstm_predictions)
+            if confidence_gauge:
+                st.plotly_chart(confidence_gauge, use_container_width=True)
+        
+        with col2:
+            # Create a card for prediction validity
+            st.markdown(f"""
+            <div style="background: linear-gradient(135deg, #1E1E1E 0%, #2C2C2C 100%); 
+                        border-radius: 10px; padding: 20px; height: 100%; 
+                        border-left: 4px solid {validity_color};">
+                <div style="font-size: 1.1rem; font-weight: bold; color: white; margin-bottom: 15px;">
+                    ⏰ Prediction Validity
+                </div>
+                <div style="font-size: 1.3rem; font-weight: bold; color: {validity_color}; margin-bottom: 10px;">
+                    {time_remaining_str}
+                </div>
+                <div style="font-size: 0.9rem; color: #AAA; margin-bottom: 10px;">
+                    Predicted at: {prediction_time.strftime('%Y-%m-%d %H:%M')} SGT
+                </div>
+                <div style="font-size: 0.9rem; color: #AAA; margin-bottom: 10px;">
+                    Expires at: {prediction_expiry.strftime('%Y-%m-%d %H:%M')} SGT
+                </div>
+                <div style="font-size: 0.8rem; color: #888; margin-top: 15px; padding-top: 10px; border-top: 1px solid #444;">
+                    Predictions are valid for 12 hours from the prediction time
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        # Display additional info in an expander
+        with st.expander("Prediction Details"):
+            st.markdown(f"""
+            - **Base Price**: ${base_price:,.2f}
+            - **Prediction Time**: {latest_prediction['prediction_time'].strftime('%Y-%m-%d %H:%M:%S')} SGT
+            - **Model Run ID**: {latest_prediction['run_id']}
+            - **Created At**: {latest_prediction['created_at'].strftime('%Y-%m-%d %H:%M:%S')} SGT
+            - **Prediction Valid Until**: {prediction_expiry.strftime('%Y-%m-%d %H:%M:%S')} SGT
+            """)
+    else:
+        st.info("🔄 No LSTM predictions available. Make sure the prediction model is running and saving results to the database.")
+        
+        # Show helpful info
+        with st.expander("ℹ️ How to start LSTM predictions"):
+            st.markdown("""
+            **Have you run the training DAG?**
+                        
+            **Have you run the predictions DAG?**
+            
+            See the model documentation for more details.
+            """)
+
     # Footer
     st.divider()
     st.caption("Data sources: Binance WebSocket (real-time prices & order book), NewsAPI/CryptoCompare/Reddit (news), Alternative.me (Fear & Greed), Mempool.space (whale txs)")
@@ -1649,4 +2287,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

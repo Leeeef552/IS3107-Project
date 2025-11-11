@@ -525,3 +525,237 @@ def get_whale_trend(interval='1 hour', limit=24):
         st.warning(f"Could not fetch whale trends: {str(e)}")
         return pd.DataFrame()
 
+
+
+@st.cache_data(ttl=300)
+def get_block_metrics(limit=24):
+    """
+    Fetch recent block metrics
+    
+    Args:
+        limit: Maximum number of blocks to fetch
+        
+    Returns:
+        DataFrame with block metrics
+    """
+    engine = get_db_engine()
+    if engine is None:
+        return pd.DataFrame()
+    
+    try:
+        query = f"""
+        SELECT
+            block_height,
+            block_hash,
+            block_timestamp,
+            tx_count,
+            size,
+            weight,
+            fill_ratio,
+            fee_total_sats,
+            avg_fee_rate_sat_vb,
+            median_fee_rate_sat_vb,
+            whale_weighted_flow,
+            whale_total_external_btc,
+            to_exchange_btc,
+            from_exchange_btc,
+            top5_concentration,
+            consolidation_index,
+            distribution_index,
+            labeled_tx_count,
+            whale_count,
+            shark_count,
+            dolphin_count,
+            calculated_at
+        FROM block_metrics
+        ORDER BY block_timestamp DESC
+        LIMIT {limit}
+        """
+        df = pd.read_sql_query(query, engine)
+        df = df.sort_values('block_timestamp')  # Sort ascending for charts
+        
+        # Convert to Singapore time
+        if not df.empty and 'block_timestamp' in df.columns:
+            import pytz
+            singapore_tz = pytz.timezone('Asia/Singapore')
+            if df['block_timestamp'].dt.tz is None:
+                df['block_timestamp'] = pd.to_datetime(df['block_timestamp']).dt.tz_localize('UTC').dt.tz_convert(singapore_tz)
+            else:
+                df['block_timestamp'] = pd.to_datetime(df['block_timestamp']).dt.tz_convert(singapore_tz)
+        
+        return df
+    except Exception as e:
+        st.warning(f"Could not fetch block metrics: {str(e)}")
+        return pd.DataFrame()
+
+
+@st.cache_data(ttl=300)
+def get_whale_sentiment(limit=24):
+    """
+    Fetch recent whale sentiment data
+    
+    Args:
+        limit: Maximum number of records to fetch
+        
+    Returns:
+        DataFrame with whale sentiment data
+    """
+    engine = get_db_engine()
+    if engine is None:
+        return pd.DataFrame()
+    
+    try:
+        query = f"""
+        SELECT
+            block_height,
+            block_hash,
+            block_timestamp,
+            whale_count,
+            shark_count,
+            dolphin_count,
+            score,
+            sentiment,
+            whale_flow_component,
+            exchange_pressure_component,
+            fee_pressure_component,
+            utilization_component,
+            calculated_at
+        FROM whale_sentiment
+        ORDER BY block_timestamp DESC
+        LIMIT {limit}
+        """
+        df = pd.read_sql_query(query, engine)
+        df = df.sort_values('block_timestamp')  # Sort ascending for charts
+        
+        # Convert to Singapore time
+        if not df.empty and 'block_timestamp' in df.columns:
+            import pytz
+            singapore_tz = pytz.timezone('Asia/Singapore')
+            if df['block_timestamp'].dt.tz is None:
+                df['block_timestamp'] = pd.to_datetime(df['block_timestamp']).dt.tz_localize('UTC').dt.tz_convert(singapore_tz)
+            else:
+                df['block_timestamp'] = pd.to_datetime(df['block_timestamp']).dt.tz_convert(singapore_tz)
+        
+        return df
+    except Exception as e:
+        st.warning(f"Could not fetch whale sentiment: {str(e)}")
+        return pd.DataFrame()
+
+
+@st.cache_data(ttl=300)
+def get_block_whale_correlation(limit=24):
+    """
+    Fetch combined block metrics and whale sentiment data for correlation analysis
+    
+    Args:
+        limit: Maximum number of records to fetch
+        
+    Returns:
+        DataFrame with combined block metrics and whale sentiment
+    """
+    engine = get_db_engine()
+    if engine is None:
+        return pd.DataFrame()
+    
+    try:
+        query = f"""
+        SELECT
+            bm.block_height,
+            bm.block_timestamp,
+            bm.tx_count,
+            bm.size,
+            bm.weight,
+            bm.avg_fee_rate_sat_vb,
+            bm.whale_weighted_flow,
+            bm.whale_total_external_btc,
+            bm.to_exchange_btc,
+            bm.from_exchange_btc,
+            bm.consolidation_index,
+            bm.distribution_index,
+            bm.whale_count,
+            bm.shark_count,
+            bm.dolphin_count,
+            ws.score as sentiment_score,
+            ws.sentiment,
+            ws.whale_flow_component,
+            ws.exchange_pressure_component,
+            ws.fee_pressure_component,
+            ws.utilization_component
+        FROM block_metrics bm
+        LEFT JOIN whale_sentiment ws ON bm.block_height = ws.block_height
+        ORDER BY bm.block_timestamp DESC
+        LIMIT {limit}
+        """
+        df = pd.read_sql_query(query, engine)
+        df = df.sort_values('block_timestamp')  # Sort ascending for charts
+        
+        # Convert to Singapore time
+        if not df.empty and 'block_timestamp' in df.columns:
+            import pytz
+            singapore_tz = pytz.timezone('Asia/Singapore')
+            if df['block_timestamp'].dt.tz is None:
+                df['block_timestamp'] = pd.to_datetime(df['block_timestamp']).dt.tz_localize('UTC').dt.tz_convert(singapore_tz)
+            else:
+                df['block_timestamp'] = pd.to_datetime(df['block_timestamp']).dt.tz_convert(singapore_tz)
+        
+        return df
+    except Exception as e:
+        st.warning(f"Could not fetch block-whale correlation: {str(e)}")
+        return pd.DataFrame()
+    
+
+# ==============================================================================
+# LSTM PREDICTIONS
+# ==============================================================================
+@st.cache_data(ttl=300)  # Cache for 5 minutes
+def get_lstm_predictions(limit=5):
+    """
+    Fetch LSTM model predictions for the next 12 hours
+    
+    Args:
+        limit: Maximum number of prediction records to fetch
+        
+    Returns:
+        DataFrame with LSTM prediction data
+    """
+    engine = get_db_engine()
+    if engine is None:
+        return pd.DataFrame()
+    
+    try:
+        query = f"""
+        SELECT
+            prediction_time,
+            run_id,
+            predicted_low,
+            predicted_high,
+            predicted_mean,
+            predicted_variance,
+            base_price,
+            created_at,
+            SQRT(predicted_variance) as predicted_std
+        FROM model_predictions
+        ORDER BY prediction_time DESC
+        LIMIT {limit}
+        """
+        df = pd.read_sql_query(query, engine)
+        df = df.sort_values('prediction_time')  # Sort ascending for charts
+        
+        # Convert to Singapore time
+        if not df.empty and 'prediction_time' in df.columns:
+            import pytz
+            singapore_tz = pytz.timezone('Asia/Singapore')
+            if df['prediction_time'].dt.tz is None:
+                df['prediction_time'] = pd.to_datetime(df['prediction_time']).dt.tz_localize('UTC').dt.tz_convert(singapore_tz)
+            else:
+                df['prediction_time'] = pd.to_datetime(df['prediction_time']).dt.tz_convert(singapore_tz)
+            
+            if df['created_at'].dt.tz is None:
+                df['created_at'] = pd.to_datetime(df['created_at']).dt.tz_localize('UTC').dt.tz_convert(singapore_tz)
+            else:
+                df['created_at'] = pd.to_datetime(df['created_at']).dt.tz_convert(singapore_tz)
+        
+        return df
+    except Exception as e:
+        st.warning(f"Could not fetch LSTM predictions: {str(e)}")
+        return pd.DataFrame()
