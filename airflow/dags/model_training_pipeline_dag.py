@@ -5,11 +5,11 @@ from airflow.operators.python import PythonOperator
 from datetime import datetime, timedelta
 
 # Import your actual functions
-from scripts.machine_learning.pull_data import pull_data
-from scripts.machine_learning.preprocess_data import preprocess_data
-from scripts.machine_learning.prepare_training_data import prepare_training_data
-from scripts.machine_learning.training import train_model_task
-from scripts.machine_learning.evaluation import evaluate_model_task
+from scripts.machine_learning_training.pull_data import pull_data
+from scripts.machine_learning_training.preprocess_data import preprocess_data
+from scripts.machine_learning_training.prepare_training_data import prepare_training_data
+from scripts.machine_learning_training.training import train_model_task
+from scripts.machine_learning_training.evaluation import evaluate_model_task
 
 default_args = {
     "owner": "airflow",
@@ -21,7 +21,7 @@ default_args = {
 }
 
 with DAG(
-    dag_id="crypto_ml_pipeline",
+    dag_id="crypto_ml_training_pipeline",
     default_args=default_args,
     description="End-to-end crypto ML pipeline: data extraction → preprocessing → training data preparation → model training",
     schedule_interval="@daily",
@@ -43,7 +43,7 @@ with DAG(
         task_id="preprocess_data",
         python_callable=preprocess_data,
         op_kwargs={
-            "time_bin": "4h",  # Resample frequency for time-series aggregation
+            "time_bin": "2h",  # Resample frequency for time-series aggregation
         },
         provide_context=True,
     )
@@ -53,8 +53,8 @@ with DAG(
         task_id="prepare_training_data",
         python_callable=prepare_training_data,
         op_kwargs={
-            "lookback_window": 120,      # 120 timesteps lookback (~20 days at 4h intervals)
-            "forecast_horizon": 12,      # Predict 12 steps ahead (~2 days)
+            "lookback_window": 60,      # 30 timesteps lookback (~5 days at 4h intervals)
+            "forecast_horizon": 6,      # Predict 12 steps ahead (1 day)
             "test_size": 0.2,            # 20% test split
             "predict_returns": True,     # Predict percentage returns instead of absolute prices
         },
