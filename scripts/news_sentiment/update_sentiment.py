@@ -15,9 +15,9 @@ import argparse
 from datetime import datetime
 from dotenv import load_dotenv
 
-from scripts.news_sentiment_airflow.fetch_news import NewsAggregator
-from scripts.news_sentiment_airflow.analyze_sentiment import SentimentAnalyzer, analyze_articles
-from scripts.news_sentiment_airflow.load_sentiment import (
+from scripts.news_sentiment.fetch_news import NewsAggregator
+from scripts.news_sentiment.analyze_sentiment import SentimentAnalyzer, analyze_articles
+from scripts.news_sentiment.load_sentiment import (
     get_db_config, 
     connect_to_db, 
     bulk_insert_articles_with_sentiment,
