@@ -1,0 +1,54 @@
+# Whale + On chain analytics as features
+
+This is in case you guys want to understand the features and data extracted from the mempool / blocks / transactions data for whale movements + on chain analytics 
+
+---
+
+## 🧩 On-Chain Whale & Smart-Money Analytics Schema
+
+| **Feature**                                                                                      | **Derived From / Formula**                                                  | **Economic Intuition**                                    | **Bullish / Bearish Interpretation**                                                                                         |
+| ------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------- | --------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| **Whale Weighted Flow** (`whale_weighted_flow / whale_total_external_btc`)                       | Weighted directional flow of large entities (inputs vs outputs, with sign). | Measures *net movement direction* of high-value entities. | 🔼 *Bullish*: large inflows to self-custody (out of exchanges); 🔽 *Bearish*: large outflows to exchanges or consolidations. |
+| **Exchange Pressure** (`tanh((to_exchange_btc - from_exchange_btc) / whale_total_external_btc)`) | Net BTC moving *to vs from* known exchange wallets.                         | Captures *distribution vs accumulation* pressure.         | 🔼 *Bullish*: more BTC leaving exchanges (accumulation); 🔽 *Bearish*: heavy inflows to exchanges (potential sell pressure). |
+| **Block Utilization** (`fill_ratio`)                                                             | Block weight / 4,000,000.                                                   | Measures blockspace demand and miner activity.            | 🔼 *Bullish*: >0.9, high on-chain demand; ⚪ *Neutral*: ~0.8 baseline; 🔽 *Bearish*: <0.5, low network use.                   |
+| **Fee Pressure** (`(avg_fee_rate_sat_vb - mean_fee_24h) / sd_fee_24h`)                           | Z-score of average fee vs 24h mean.                                         | Gauges *demand urgency* and network congestion.           | 🔼 *Bullish*: high positive z-score → fee competition; 🔽 *Bearish*: negative z-score → weak demand.                         |
+| **Top-5 Concentration** (`top5_concentration`)                                                   | Share of value from top 5 whale txs in block.                               | Measures dominance of few large txs.                      | 🔽 *Bearish*: concentrated → whale-driven volume; 🔼 *Bullish*: diversified → retail activity.                               |
+| **Consolidation Index** (`avg_inputs / avg_outputs`)                                             | Ratio of inputs to outputs per whale tx.                                    | Reflects UTXO consolidation vs distribution.              | 🔽 *Bearish*: >1 → consolidation (whales reorganizing funds); 🔼 *Bullish*: <1 → distribution to many addresses.             |
+| **Distribution Index** (`avg_outputs / avg_inputs`)                                              | Inverse of above; breadth of distribution.                                  | Measures network spread.                                  | 🔼 *Bullish*: >1 → wide distribution; 🔽 *Bearish*: <1 → concentrated outputs.                                               |
+| **Exchange Inflow BTC** (`to_exchange_btc`)                                                      | Sum of whale txs sending to exchange addresses.                             | Proxy for potential sell-side liquidity.                  | 🔽 *Bearish*: rising inflows to exchanges.                                                                                   |
+| **Exchange Outflow BTC** (`from_exchange_btc`)                                                   | Sum of whale txs withdrawing from exchanges.                                | Proxy for accumulation / HODL sentiment.                  | 🔼 *Bullish*: rising outflows from exchanges.                                                                                |
+| **Whale Count / Shark Count / Dolphin Count**                                                    | Label counts per block (thresholds ≥1000, ≥500, ≥100 BTC).                  | Market participant composition.                           | 🔼 *Bullish*: more dolphins/sharks (broad activity); 🔽 *Bearish*: dominated by few whales.                                  |
+
+---
+
+## 🧠 Whale Sentiment Model (Actual Implementation)
+
+| **Component**         | **Weight** | **Definition**                                                           | **Economic Intuition**                             |
+| --------------------- | ---------- | ------------------------------------------------------------------------ | -------------------------------------------------- |
+| **Whale Flow**        | 0.55       | Normalized `whale_weighted_flow / whale_total_external_btc`              | Measures smart-money accumulation vs distribution. |
+| **Exchange Pressure** | 0.30       | `tanh((to_exchange_btc - from_exchange_btc) / whale_total_external_btc)` | Net exchange direction (inflows = sell pressure).  |
+| **Utilization**       | 0.10       | `tanh(fill_ratio - 0.80)`                                                | Relative on-chain activity vs baseline (0.8).      |
+| **Fee Pressure**      | 0.05       | Z-score of fee rate vs 24h rolling mean.                                 | Momentum of demand for blockspace.                 |
+
+**Final Score:**
+`Sentiment Score = 0.55 * wf + 0.30 * ex + 0.10 * ut + 0.05 * fp`
+
+**Classification Logic:**
+
+* 🔼 *Bullish*: `score > +0.25`
+* ⚪ *Neutral*: `-0.25 ≤ score ≤ +0.25`
+* 🔽 *Bearish*: `score < -0.25`
+
+---
+
+## 🔍 Interpretive Summary
+
+| **Dimension**           | **Bullish Signal**                              | **Bearish Signal**                     |
+| ----------------------- | ----------------------------------------------- | -------------------------------------- |
+| **Smart-Money Flow**    | Whales withdrawing or self-custody accumulation | Whales sending to exchanges            |
+| **Exchange Pressure**   | Net outflows from CEXs                          | Inflows to exchanges                   |
+| **Utilization / Fees**  | High block fill & rising fee z-score            | Low utilization, negative fee momentum |
+| **Value Distribution**  | Smaller, varied whale tx sizes                  | Few dominant large txs                 |
+| **Composite Sentiment** | Score > +0.25 (net positive pressure)           | Score < -0.25 (net negative pressure)  |
+
+---
