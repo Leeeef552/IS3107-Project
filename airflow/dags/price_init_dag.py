@@ -52,6 +52,7 @@ with DAG(
     load_task = PythonOperator(
         task_id="load_price",
         python_callable=load_price,
+        execution_timeout=timedelta(hours=3),  # Set 3 hour timeout for large data load
     )
 
     # ------------------------------------------------------------------
