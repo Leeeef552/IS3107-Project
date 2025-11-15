@@ -24,7 +24,7 @@ with DAG(
     dag_id="crypto_ml_training_pipeline",
     default_args=default_args,
     description="End-to-end crypto ML pipeline: data extraction → preprocessing → training data preparation → model training",
-    schedule_interval="@daily",
+    schedule_interval="@weekly",
     start_date=datetime(2025, 1, 1),
     catchup=False,
     tags=["crypto", "ml", "lstm", "pipeline"],

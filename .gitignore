@@ -1,66 +1,90 @@
-# Python virtual environments
+# ============================
+# Python: Environments
+# ============================
 .venv/
 venv/
 *.venv
 ENV/
 env/
 
-# Byte-compiled / cache files
+# ============================
+# Python: Bytecode / Cache
+# ============================
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 
-# Distribution / packaging
+# ============================
+# Python: Packaging / Build
+# ============================
 build/
 dist/
 *.egg-info/
 .eggs/
 
-# Environment variables or secret files
+# ============================
+# Secrets / Environment Files
+# ============================
 .env
 *.env
-!env.example
+!example.env   # keep template env file
 
-# IDE / editor settings
+# ============================
+# Editor / IDE Configs
+# ============================
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
 .DS_Store
+Thumbs.db
 
+# ============================
 # Jupyter Notebook
-.ipynb_checkpoints
+# ============================
+.ipynb_checkpoints/
 *.ipynb
 !coindesk_news_test.ipynb
 !db.ipynb
+!ml.ipynb
 
-# Data files
+# ============================
+# Data Files
+# ============================
 *.csv
 *.parquet
 historical_data/*.parquet
+.archive
+.claude
+logs/
+
+# Keep selected data files
 !historical_data/.gitkeep
 !fear_greed.csv
 !news_data.csv
 !price_data.csv
-!ml.ipynb
 
+# ============================
 # Logs
+# ============================
 *.log
-logs/
 
+# ============================
 # Testing
+# ============================
 .pytest_cache/
 .coverage
 htmlcov/
 
+# ============================
 # Streamlit
+# ============================
 .streamlit/secrets.toml
 
-# OS files
-Thumbs.db
-
-# joblib / assets / artifacts
+# ============================
+# ML Models / Artifacts
+# ============================
 *.joblib
 *.pth
