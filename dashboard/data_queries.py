@@ -225,27 +225,53 @@ def get_sentiment_summary(interval='1 day', limit=7):
 @st.cache_data(ttl=3600)  # Cache for 1 hour
 def get_fear_greed_index():
     """
-    Fetch Fear & Greed Index from alternative.me API
-    
+    Fetch Fear & Greed Index from your database table 'fear_greed_index'
+
     Returns:
         Dictionary with 'value', 'classification', and 'timestamp'
-        or None if request fails
+        or None if no data found
     """
+    engine = get_db_engine()
+    if engine is None:
+        return None
+
     try:
-        response = requests.get('https://api.alternative.me/fng/?limit=1', timeout=10)
-        if response.status_code == 200:
-            data = response.json()
-            if data['data']:
-                fng_data = data['data'][0]
-                return {
-                    'value': int(fng_data['value']),
-                    'classification': fng_data['value_classification'],
-                    'timestamp': datetime.fromtimestamp(int(fng_data['timestamp']))
-                }
-        return None
+        query = """
+        SELECT 
+            time,
+            value,
+            value_classification
+        FROM fear_greed_index
+        ORDER BY time DESC
+        LIMIT 1
+        """
+
+        df = pd.read_sql_query(query, engine)
+
+        if df.empty:
+            return None
+
+        row = df.iloc[0]
+
+        # Convert timestamp to Singapore time
+        import pytz
+        singapore_tz = pytz.timezone('Asia/Singapore')
+
+        if row['time'].tzinfo is None:
+            timestamp = pd.to_datetime(row['time']).tz_localize('UTC').tz_convert(singapore_tz)
+        else:
+            timestamp = pd.to_datetime(row['time']).tz_convert(singapore_tz)
+
+        return {
+            "value": int(row["value"]),
+            "classification": row["value_classification"],
+            "timestamp": timestamp
+        }
+
     except Exception as e:
-        st.warning(f"Could not fetch Fear & Greed Index: {str(e)}")
+        st.warning(f"Could not fetch Fear & Greed Index from database: {str(e)}")
         return None
+
 
 
 @st.cache_data(ttl=3600)  # Cache for 1 hour

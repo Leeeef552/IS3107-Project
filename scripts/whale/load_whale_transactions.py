@@ -11,7 +11,7 @@ def connect_to_db():
     return conn
 
 
-def execute_schema_script(conn, schema_filename="init_whale_db_airflow.sql"):
+def execute_schema_script(conn, schema_filename="init_whale_db.sql"):
     """Run the schema creation SQL safely (idempotent)."""
     import os
 
@@ -34,7 +34,7 @@ def execute_schema_script(conn, schema_filename="init_whale_db_airflow.sql"):
         cur.close()
 
 
-def init_whaledb(schema_filename="init_whale_db_airflow.sql", **_):
+def init_whaledb(schema_filename="init_whale_db.sql", **_):
     """Initialize Timescale schema for whale tracking."""
     conn = connect_to_db()
     try:
