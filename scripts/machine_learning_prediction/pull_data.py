@@ -13,9 +13,9 @@ def load_tables_to_dataframes(host, port, database, username, password, lookback
     dataframes = {}
 
     today = datetime.today()
-    price_cutoff = today - timedelta(days=lookback_window+20)
-    sentiment_cutoff = today - timedelta(days=lookback_window+5)
-    greed_cutoff = today - timedelta(days=lookback_window+5)
+    price_cutoff = today - timedelta(days=lookback_window+100)
+    sentiment_cutoff = today - timedelta(days=lookback_window+25)
+    greed_cutoff = today - timedelta(days=lookback_window+25)
 
     try:
         logger.info("Connecting to PostgreSQL database...")

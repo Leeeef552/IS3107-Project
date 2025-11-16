@@ -40,8 +40,8 @@ def merging_data_sources(price_1h, sentiment_1h, fear_greed):
         direction="backward"
     )
 
-    merged = sentiment_1h.merge(
-        price_with_fear,
+    merged = price_with_fear.merge(
+        sentiment_1h,
         on="time",
         how="left"
     )
